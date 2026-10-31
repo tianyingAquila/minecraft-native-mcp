@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>大肥鱼的冒险 · 直播控制台</title>
+    <link rel="stylesheet" href="/web/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="title">
+          <img src="/assets/whale.png" alt="大肥鱼" />
+          <div>
+            <h1>大肥鱼的冒险</h1>
+            <p>DeepSeek 自主挑战末影龙</p>
+          </div>
+        </div>
+        <span class="quiet">鲸鱼与气泡显示在游戏内</span>
+      </header>
+      <div class="workspace">
+        <section class="operation">
+          <div class="status-line">
+            <span id="status" class="status">尚未开始</span
+            ><span id="world">排练世界</span>
+          </div>
+          <h2 id="goal">准备踏上旅程</h2>
+          <p id="reason" class="reason">先准备游戏环境，再开始冒险。</p>
+          <div class="actions">
+            <button id="prepare" data-action="prepare">准备游戏</button
+            ><button id="start" data-action="start" class="primary">
+              开始冒险</button
+            ><button id="pause" data-action="pause">暂停整局</button
+            ><button id="stop" data-action="stop" class="stop">
+              保存并停止</button
+            ><button data-action="observer">打开游戏画面</button>
+          </div>
+          <div class="session">
+            <div>
+              <span>本场剩余</span><strong id="remaining">02:00:00</strong>
+            </div>
+            <div>
+              <span>账户可用余额</span><strong id="balance">—</strong
+              ><button id="refresh" data-action="balance" class="text-button">
+                刷新
+              </button>
+            </div>
+            <div>
+              <span>生命 / 饥饿</span><strong id="vitals">— / —</strong>
+            </div>
+          </div>
+          <div class="rule-strip">
+            生命回复 I<span>抗性提升 I</span><span>夜视 I</span><span>死亡不掉落</span
+            ><small>由服务端应用，模型已知规则</small>
+          </div>
+          <form id="settings">
+            <label
+              >每场时长
+              <span
+                ><input
+                  id="duration"
+                  type="number"
+                  min="1"
+                  max="720"
+                  value="120"
+                />
+                分钟</span
+              ></label
+            ><label
+              >游戏世界
+              <select id="world-select">
+                <option value="rehearsal">排练世界</option>
+                <option value="live">正式世界</option>
+              </select></label
+            ><label><span><input id="native-hud" type="checkbox" checked /> 游戏内鲸鱼与气泡</span></label
+            ><button type="submit">保存设置</button>
+          </form>
+          <p id="balance-error" class="error"></p>
+          <p id="notice" role="status"></p>
+          <p id="vision-state">截图诊断：本次启动尚未调用</p>
+          <p id="performance-state" class="reason"></p>
+          <p id="request-usage" class="reason">本次启动尚无模型请求。</p>
+          <details><summary>她本轮看到的空间概览</summary><pre id="spatial-summary" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.7">准备游戏后显示。</pre></details>
+          <div class="log-title">
+            <h3>最近发生了什么</h3>
+            <small id="tools">游戏工具尚未连接</small>
+          </div>
+          <ol id="events" class="events">
+            <li>等待你开始准备。</li>
+          </ol>
+        </section>
+        <aside>
+          <div class="preview-title">
+            <h3>观众显示预览</h3>
+            <span>这里不是游戏画面</span>
+          </div>
+          <div class="preview">
+            <iframe src="/overlay?preview=1" title="小鲸鱼挂件预览"></iframe>
+          </div>
+          <button data-action="show_balance" class="wide">
+            预览一次真实余额气泡
+          </button>
+          <button data-action="show_commentary" class="wide">
+            预览操作气泡（测试，不调用模型）
+          </button>
+          <p>
+            准备游戏后，鲸鱼与气泡直接显示在游戏画面中。右侧小预览只用来查看样式。暂停原因和错误只在控制台显示。
+          </p>
+          <div class="capture-note">
+            <h3>在直播伴侣中使用</h3>
+            <p>
+              直播伴侣只需捕获 Minecraft 游戏画面。请停用旧浏览器挂件素材，避免重复显示鲸鱼；不需要绿幕窗口。
+            </p>
+            <code id="overlay-url"></code>
+            <p><a href="/overlay?key=green" target="_blank">备用浏览器挂件</a>：回退时先取消“游戏内鲸鱼与气泡”并保存，再使用旧挂件素材。</p>
+            <p>只采集游戏声音。挂件没有音效或配音。</p>
+            <button data-action="companion">打开抖音直播伴侣</button>
+          </div>
+        </aside>
+      </div>
+      <footer>
+        此控制台管理游戏与模型；推流由外部直播软件控制。到时会保存并暂停游戏。<button
+          data-action="exit"
+          class="text-button"
+        >
+          退出控制台
+        </button>
+      </footer>
+    </main>
+    <script type="module" src="/web/control.mjs"></script>
+  </body>
+</html>

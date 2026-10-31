@@ -1,0 +1,96 @@
+:root {
+  font-family: "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  background: transparent;
+  color: #173e65;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+body.green {
+  background: #00ff00;
+}
+body.preview {
+  background: #d3e6ed;
+}
+#note {
+  white-space: pre-wrap;
+  position: absolute;
+  top: 2.7vh;
+  left: 3vw;
+  right: 3vw;
+  margin: 0;
+  text-align: center;
+  font-size: clamp(12px, 1.5vw, 28px);
+  font-weight: 500;
+  color: white;
+  text-shadow:
+    0 1px 3px #14385c,
+    0 0 6px #14385c;
+  line-height: 1.7;
+}
+.whale {
+  position: absolute;
+  left: 3.3vw;
+  bottom: 8.5vh;
+  width: clamp(105px, 16vw, 300px);
+}
+.whale img {
+  display: block;
+  width: 100%;
+  filter: drop-shadow(0 4px 3px #173e651f);
+  transform: scaleX(-1);
+  transform-origin: bottom center;
+}
+.bubble {
+  position: absolute;
+  left: 12%;
+  bottom: 106%;
+  min-width: 150px;
+  max-width: min(440px, 70vw);
+  width: max-content;
+  height: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  border: 2px solid #647db3;
+  border-radius: 16px 16px 16px 4px;
+  padding: 13px 19px;
+  background: #ffffffed;
+  color: #35547d;
+  font-weight: 600;
+  line-height: 1.6;
+  font-size: clamp(12px, 1.65vw, 24px);
+  opacity: 0;
+  transform: translateY(7px);
+  transition:
+    opacity 0.18s,
+    transform 0.18s;
+  pointer-events: none;
+}
+.bubble.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.bubble:after {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  left: 19px;
+  width: 15px;
+  height: 15px;
+  background: #fff;
+  border-right: 2px solid #647db3;
+  border-bottom: 2px solid #647db3;
+  transform: skewY(-25deg) rotate(35deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .bubble {
+    transition: none;
+  }
+}

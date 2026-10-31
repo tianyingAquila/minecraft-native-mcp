@@ -1,0 +1,12 @@
+plugins { id 'net.fabricmc.fabric-loom-remap' }
+version='0.1.0'
+group='dev.fishlive'
+base { archivesName='fish-pause-server' }
+repositories { mavenCentral() }
+dependencies {
+  minecraft 'com.mojang:minecraft:1.21.4'
+  mappings loom.officialMojangMappings()
+  modImplementation 'net.fabricmc:fabric-loader:0.20.1'
+}
+java { toolchain { languageVersion=JavaLanguageVersion.of(21) } }
+tasks.withType(JavaCompile).configureEach { options.release=21; options.encoding='UTF-8' }

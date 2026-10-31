@@ -1,0 +1,15 @@
+plugins { id 'net.fabricmc.fabric-loom-remap' version '1.17.11' }
+version='0.1.0'
+group='dev.fishlive'
+base { archivesName='fish-live-client' }
+repositories { mavenCentral() }
+dependencies {
+  minecraft 'com.mojang:minecraft:1.21.4'
+  mappings loom.officialMojangMappings()
+  modImplementation 'net.fabricmc:fabric-loader:0.20.1'
+  modImplementation 'net.fabricmc.fabric-api:fabric-api:0.119.4+1.21.4'
+  modImplementation files('../data/native-client/mods/mcpfabric-0.8.0+1.21.4.jar')
+  modImplementation files('../data/native-client/mods/baritone-api-fabric-1.13.1.jar')
+}
+java { toolchain { languageVersion=JavaLanguageVersion.of(21) } }
+tasks.withType(JavaCompile).configureEach { options.release=21; options.encoding='UTF-8' }

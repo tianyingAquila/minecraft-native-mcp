@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "minecraft-native": {
+      "command": "node",
+      "args": [
+        "C:/projects/minecraft-native-mcp/src/mcp-server.mjs",
+        "--launch"
+      ]
+    }
+  }
+}

@@ -1,0 +1,8 @@
+url: https://github.com/tianyingAquila/minecraft-native-mcp
+name: tianyingAquila/minecraft-native-mcp
+category: tools
+description:
+  en: Opens a native Minecraft MCP dashboard from DSH with dependency preparation, spatial perception and optional livestream widgets.
+  zh: 从 DSH 打开原生 Minecraft MCP 控制台，提供依赖准备、空间感知和可选直播挂件。
+icon: https://raw.githubusercontent.com/tianyingAquila/minecraft-native-mcp/main/assets/whale.png
+tarball: https://github.com/tianyingAquila/minecraft-native-mcp/releases/latest/download/minecraft-native-mcp.tgz

@@ -1,0 +1,4 @@
+pluginManagement { repositories { maven { url='https://maven.fabricmc.net/' }; gradlePluginPortal(); mavenCentral() } }
+rootProject.name='fish-live-client'
+include('server-addon')
+project(':server-addon').projectDir=file('../server-addon')

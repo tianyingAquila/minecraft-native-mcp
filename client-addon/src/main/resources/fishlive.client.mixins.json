@@ -1,0 +1,1 @@
+{"required":true,"package":"dev.fishlive.client.mixin","compatibilityLevel":"JAVA_21","client":["PausedMovementMixin"],"injectors":{"defaultRequire":1}}

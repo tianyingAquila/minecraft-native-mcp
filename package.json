@@ -1,0 +1,60 @@
+{
+  "name": "minecraft-native-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "mcp": "node src/mcp-server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "yaml": "2.9.1"
+  },
+  "description": "Native Minecraft MCP with spatial perception, bounded actions and optional livestream integration",
+  "license": "MIT",
+  "main": "dsh/index.mjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tianyingAquila/minecraft-native-mcp.git"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "dsh",
+    "minecraft",
+    "mcp",
+    "fabric"
+  ],
+  "files": [
+    "dsh",
+    "src",
+    "web",
+    "scripts",
+    "prompts",
+    "assets",
+    "client-addon/src",
+    "client-addon/build.gradle",
+    "client-addon/settings.gradle",
+    "client-addon/gradle.properties",
+    "server-addon/src",
+    "server-addon/build.gradle",
+    "vendor-lock.json",
+    "package-lock.json",
+    "examples",
+    "docs",
+    "licenses",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  }
+}
