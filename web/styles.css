@@ -391,3 +391,6 @@ footer {
   color: #889fb5;
   margin-left: 8px;
 }
+[hidden] { display:none !important; }
+body[data-streaming="false"] .workspace { grid-template-columns:1fr; }
+#minecraft-home { width:min(100%,480px); font-size:14px; }

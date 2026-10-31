@@ -93,8 +93,10 @@ export class Store {
     );
   }
   configure(patch) {
-    if (this.status === "running")
+    if (["running","preparing","pausing"].includes(this.status))
       throw new Error("请先暂停，再修改时长或世界。");
+    if(patch.streamingEnabled!==undefined){if(typeof patch.streamingEnabled!=='boolean')throw new Error('直播扩展开关无效');this.settings.streamingEnabled=patch.streamingEnabled;}
+    if(patch.minecraftHome!==undefined){if(typeof patch.minecraftHome!=='string'||patch.minecraftHome.length>1024)throw new Error('游戏目录无效');this.settings.minecraftHome=patch.minecraftHome.trim();}
     if (patch.nativeHudEnabled !== undefined) {
       if (typeof patch.nativeHudEnabled !== "boolean") throw new Error("游戏内挂件开关无效。");
       this.settings.nativeHudEnabled = patch.nativeHudEnabled;
@@ -129,6 +131,7 @@ export class Store {
       health: this.health,
       hunger: this.hunger,
       position: this.position,
+      actionPlan:this.commentary?.text??'',
       inventory: this.inventory,
       deaths: this.deaths,
       remainingMs: this.remaining(),
@@ -151,7 +154,8 @@ export class Store {
   }
   overlayState() {
     return {
-      hudEnabled: this.settings.nativeHudEnabled !== false,
+      hudEnabled: this.settings.streamingEnabled === true && this.settings.nativeHudEnabled !== false,
+      streamingEnabled:this.settings.streamingEnabled===true,
       note: FIXED_NOTE,
       balance:
         this.balance && Date.now() - this.balance.checkedAt < 120000

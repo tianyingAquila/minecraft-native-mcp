@@ -1,0 +1,19 @@
+{
+  "name": "dsh-minecraft-stream",
+  "version": "0.2.0",
+  "type": "module",
+  "main": "index.mjs",
+  "files": [
+    "index.mjs",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "description": "Optional livestream widgets and Douyin capture guidance for Minecraft Native MCP.",
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

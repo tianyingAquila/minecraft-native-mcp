@@ -1,4 +1,4 @@
-"""Prepare an official vanilla spectator client. No account credentials are stored."""
+"""Prepare the vanilla client base reused by the native Fabric player. No account credentials are stored."""
 import concurrent.futures
 import hashlib
 import json
@@ -8,14 +8,31 @@ import re
 import urllib.request
 import uuid
 import zipfile
+import shutil
+import subprocess
+import ssl
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 CLIENT = ROOT / 'runtime' / 'client'
-ASSETS = Path(os.environ['APPDATA']) / '.minecraft' / 'assets'
+MC_HOME = Path(os.environ.get('FISH_MINECRAFT_HOME', str(Path(os.environ['APPDATA']) / '.minecraft')))
+ASSETS = Path(os.environ.get('FISH_ASSET_ROOT', str(MC_HOME / 'assets' if (MC_HOME / 'assets').exists() else Path(os.environ['APPDATA']) / '.minecraft' / 'assets')))
+
+def fetch_bytes(url, timeout=90):
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            return response.read()
+    except urllib.error.URLError as error:
+        # Portable Python may miss an intermediate certificate that Windows Schannel resolves.
+        # Use the OS HTTPS client with its normal certificate verification, retaining file hashes.
+        curl = Path(os.environ.get('SystemRoot', 'C:/Windows')) / 'System32' / 'curl.exe'
+        if sys.platform != 'win32' or not isinstance(error.reason, ssl.SSLError) or not curl.is_file():
+            raise
+        result = subprocess.run([str(curl), '--fail', '--silent', '--show-error', '--location', '--proto', '=https', '--proto-redir', '=https', '--max-time', str(timeout), url], capture_output=True, check=True)
+        return result.stdout
 
 def request_json(url):
-    with urllib.request.urlopen(url, timeout=45) as response:
-        return json.load(response)
+    return json.loads(fetch_bytes(url, 45))
 
 def download(job):
     url, target, expected = job
@@ -25,8 +42,7 @@ def download(job):
     target.parent.mkdir(parents=True, exist_ok=True)
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(url, timeout=90) as response:
-                payload = response.read()
+            payload = fetch_bytes(url)
             if expected and hashlib.sha1(payload).hexdigest() != expected:
                 raise RuntimeError('Checksum mismatch: ' + target.name)
             temporary = target.with_suffix(target.suffix + '.fish-download')
@@ -55,6 +71,10 @@ def main():
     CLIENT.mkdir(parents=True, exist_ok=True)
     manifest = request_json('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')
     version = request_json(next(x['url'] for x in manifest['versions'] if x['id'] == '1.21.4'))
+    game_candidates = [MC_HOME / 'versions/1.21.4/1.21.4.jar', MC_HOME / '1.21.4.jar', MC_HOME / 'client.jar', CLIENT / 'client.jar']
+    game_jar = next((p for p in game_candidates if p.is_file() and hashlib.sha1(p.read_bytes()).hexdigest() == version['downloads']['client']['sha1']), None)
+    if game_jar is None:
+        raise RuntimeError('未找到有效的 Minecraft Java 1.21.4 本体。请先在启动器安装并启动一次，或在控制台填写包含该版本的游戏目录；插件不会自动下载客户端本体。')
     (CLIENT / 'version.json').write_text(json.dumps(version), encoding='utf-8')
     index = request_json(version['assetIndex']['url'])
     index_path = ASSETS / 'indexes' / (version['assets'] + '.json')
@@ -82,7 +102,8 @@ def main():
             native_jars.append(target)
     client_jar = CLIENT / 'client.jar'
     artifact = version['downloads']['client']
-    jobs.append((artifact['url'], client_jar, artifact['sha1']))
+    if game_jar.resolve() != client_jar.resolve():
+        shutil.copy2(game_jar, client_jar)
     classpath.append(str(client_jar))
     missing_bytes = 0
     for item in index['objects'].values():

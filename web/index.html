@@ -3,20 +3,20 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>大肥鱼的冒险 · 直播控制台</title>
+    <title>Minecraft · 自主游玩控制台</title>
     <link rel="stylesheet" href="/web/styles.css" />
   </head>
   <body>
     <main>
       <header>
         <div class="title">
-          <img src="/assets/whale.png" alt="大肥鱼" />
+          <img src="/assets/whale.png" alt="大肥鱼" class="stream-only" hidden />
           <div>
-            <h1>大肥鱼的冒险</h1>
+            <h1>Minecraft 自主游玩</h1>
             <p>DeepSeek 自主挑战末影龙</p>
           </div>
         </div>
-        <span class="quiet">鲸鱼与气泡显示在游戏内</span>
+        <span class="quiet" id="display-mode">普通游玩模式</span>
       </header>
       <div class="workspace">
         <section class="operation">
@@ -26,6 +26,7 @@
           </div>
           <h2 id="goal">准备踏上旅程</h2>
           <p id="reason" class="reason">先准备游戏环境，再开始冒险。</p>
+          <p id="action-plan"></p>
           <div class="actions">
             <button id="prepare" data-action="prepare">准备游戏</button
             ><button id="start" data-action="start" class="primary">
@@ -54,6 +55,7 @@
             ><small>由服务端应用，模型已知规则</small>
           </div>
           <form id="settings">
+            <label>已有游戏目录（未自动找到时填写）<input id="minecraft-home" placeholder="包含 Minecraft Java 1.21.4 的 .minecraft 目录" type="text" /></label>
             <label
               >每场时长
               <span
@@ -72,7 +74,7 @@
                 <option value="rehearsal">排练世界</option>
                 <option value="live">正式世界</option>
               </select></label
-            ><label><span><input id="native-hud" type="checkbox" checked /> 游戏内鲸鱼与气泡</span></label
+            ><label class="stream-only" hidden><span><input id="native-hud" type="checkbox" /> 游戏内鲸鱼与气泡</span></label
             ><button type="submit">保存设置</button>
           </form>
           <p id="balance-error" class="error"></p>
@@ -89,13 +91,13 @@
             <li>等待你开始准备。</li>
           </ol>
         </section>
-        <aside>
+        <aside id="streaming-panel" class="stream-only" hidden>
           <div class="preview-title">
             <h3>观众显示预览</h3>
             <span>这里不是游戏画面</span>
           </div>
           <div class="preview">
-            <iframe src="/overlay?preview=1" title="小鲸鱼挂件预览"></iframe>
+            <iframe id="stream-preview" data-src="/overlay?preview=1" title="小鲸鱼挂件预览"></iframe>
           </div>
           <button data-action="show_balance" class="wide">
             预览一次真实余额气泡
@@ -115,11 +117,12 @@
             <p><a href="/overlay?key=green" target="_blank">备用浏览器挂件</a>：回退时先取消“游戏内鲸鱼与气泡”并保存，再使用旧挂件素材。</p>
             <p>只采集游戏声音。挂件没有音效或配音。</p>
             <button data-action="companion">打开抖音直播伴侣</button>
+            <button id="disable-streaming">关闭直播扩展，返回普通游玩</button>
           </div>
         </aside>
       </div>
       <footer>
-        此控制台管理游戏与模型；推流由外部直播软件控制。到时会保存并暂停游戏。<button
+        此控制台管理游戏与模型，到时会保存并暂停。<span class="stream-only" hidden>推流由外部直播软件单独控制。</span><button
           data-action="exit"
           class="text-button"
         >

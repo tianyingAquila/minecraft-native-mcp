@@ -1,6 +1,6 @@
 {
   "name": "minecraft-native-mcp",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -52,9 +52,6 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "platform": "web"
     }
   }
 }

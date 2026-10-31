@@ -100,7 +100,7 @@ const server = http.createServer(async (req, res) => {
           else await runtime.observer.start(runtime.store.settings);
           break;
         case "companion": {
-          const p = spawn(process.env.FISH_COMPANION_PATH || (()=>{throw new Error("Set FISH_COMPANION_PATH to the companion executable.");})(), [], {
+          const p = spawn(process.env.FISH_COMPANION_PATH || (()=>{throw new Error("请手动打开直播伴侣；如需此按钮启动，可设置 FISH_COMPANION_PATH 为它的程序路径。");})(), [], {
             detached: true,
             stdio: "ignore",
             windowsHide: false,

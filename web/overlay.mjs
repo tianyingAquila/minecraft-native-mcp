@@ -35,6 +35,8 @@ async function poll() {
       return;
     }
     overlayVersion = state.overlayVersion || overlayVersion;
+    document.body.style.visibility = state.streamingEnabled ? 'visible' : 'hidden';
+    if (!state.streamingEnabled) return;
     note.textContent = state.note;
     if(state.reaction && state.reaction.seq!==reactionSeq){reactionSeq=state.reaction.seq;waitingReaction=state.reaction;}
     if (first) {

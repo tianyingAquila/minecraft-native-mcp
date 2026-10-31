@@ -6,7 +6,9 @@ from pathlib import Path
 import re
 import urllib.request
 import uuid
-from prepare_client import download, request_json
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from prepare_client import download, request_json, fetch_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / 'runtime'
@@ -25,8 +27,7 @@ def fetch_verified(url, target, algorithm, expected):
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists() and hashlib.new(algorithm, target.read_bytes()).hexdigest() == expected:
         return
-    with urllib.request.urlopen(url, timeout=90) as r:
-        payload = r.read()
+    payload = fetch_bytes(url)
     if hashlib.new(algorithm, payload).hexdigest() != expected:
         raise RuntimeError('Checksum mismatch: ' + target.name)
     temporary = target.with_suffix(target.suffix + '.fish-download')
@@ -44,8 +45,7 @@ def main():
         rel = f'{group.replace(".", "/")}/{artifact}/{version}/{artifact}-{version}.jar'
         target = CLIENT / 'libraries' / rel
         url = lib['url'].rstrip('/') + '/' + rel
-        with urllib.request.urlopen(url + '.sha1', timeout=45) as r:
-            digest = r.read().decode().strip().split()[0]
+        digest = fetch_bytes(url + '.sha1', 45).decode().strip().split()[0]
         download((url, target, digest))
         libraries.append(str(target))
     for url, filename, algorithm, digest in MODS:

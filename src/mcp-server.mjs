@@ -13,7 +13,7 @@ import {VisionDiagnostics,VISION_TOOL} from './vision.mjs';
 let runtime,actions;
 const launched=process.argv.includes('--launch');
 if(launched){
-  runtime=new Runtime();await runtime.prepare();
+  runtime=new Runtime();await runtime.prepare({requireModel:false});
   runtime.minecraft.resume();await runtime.mcp.resume();actions=runtime.mcp;
 }else{
   const file=process.env.FISH_BRIDGE_CONFIG||path.join(DATA,'native-client/config/mcpfabric.config.json');

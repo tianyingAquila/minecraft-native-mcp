@@ -4,7 +4,9 @@
 
 核心入口通过标准 stdio 暴露工具；无需 DeepSeek 或直播平台。客户端代理的寻路、配方、长期地点记忆复用固定版本 mcpfabric；新增的连续矿道、原生交互确认和空间感知在本项目工具层及 client-addon 中。
 
-DSH入口位于 `dsh/index.mjs` 和 `dsh/manager.mjs`。Cordis bundle 注册启动器路由及桌面/网页注入行，使用宿主已有webServer，不增加常驻代理。启动器在用户点击后准备独立工作副本或启动控制台，通过默认浏览器打开21940地址。首次准备输出到工作目录 logs/setup.log；工作副本默认不自动覆盖更新，避免改写存档及配置。退出DSH插件会清理拥有的准备任务和控制台，外部已有控制台保持其原有生命周期。
+DSH基础插件位于 `dsh/index.mjs` 和 `dsh/manager.mjs`。Cordis bundle 在模式选择器右侧注入入口，使用宿主已有 webServer。启用时补齐基础依赖，点击后打开自主控制台；`src/environment.mjs` 在“准备游戏”时核对已有游戏并调用安装脚本，实际连接冻结后才进入 ready。默认托管副本升级先备份源码，保留 data/runtime/vendor；外部指定项目不自动改写。退出插件清理拥有的任务与控制台，不接管外部进程生命周期。
+
+`packages/dsh-minecraft-stream` 是单独发布的可选扩展，只调用基础版的直播模式开关。普通模式不绘制挂件，直播模式才加载浏览器预览并启用游戏内 HUD。两者共用同一个控制台与游戏，不新增常驻中转服务。
 
 - `src/client-actions.mjs`：工具目录、参数、任务互斥和取消。
 - `src/spatial.mjs` / `FishSpatialScan.java`：局部体素采样、射线可见面、保守地面连通、方向摘要和切片。

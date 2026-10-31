@@ -22,6 +22,11 @@ async function command(action, extra = {}) {
   pending = true;
   $("notice").textContent = "正在处理…";
   try {
+    if(action==='prepare'){
+      const settings={durationMinutes:Number($('duration').value),world:$('world-select').value,minecraftHome:$('minecraft-home').value,nativeHudEnabled:$('native-hud').checked};
+      const saved=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'settings',settings})});
+      if(!saved.ok)throw new Error((await saved.json()).error);
+    }
     const r = await fetch("/api/control", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -38,6 +43,12 @@ async function command(action, extra = {}) {
   }
 }
 function render(s) {
+  const streaming=s.settings.streamingEnabled===true;
+  document.body.dataset.streaming=String(streaming);
+  for(const el of document.querySelectorAll('.stream-only'))el.hidden=!streaming;
+  const frame=$('stream-preview');if(streaming&&!frame.hasAttribute('src'))frame.src=frame.dataset.src;if(!streaming&&frame.hasAttribute('src'))frame.removeAttribute('src');
+  $('display-mode').textContent=streaming?'直播扩展已启用':'普通游玩模式';
+  $('action-plan').textContent=s.actionPlan?'当前打算：'+s.actionPlan:'';
   $("status").textContent = names[s.status] || s.status;
   $("status").className = "status " + s.status;
   $("goal").textContent = s.goal;
@@ -70,14 +81,16 @@ function render(s) {
   $("prepare").disabled = ["running", "preparing", "pausing"].includes(
     s.status,
   );
-  $("start").disabled = ["running", "preparing", "pausing"].includes(s.status);
-  $("pause").disabled = !["running", "ready"].includes(s.status);
+  $("start").disabled = !['ready','paused'].includes(s.status);
+  $("pause").disabled = !["running", "ready", "preparing"].includes(s.status);
+  $('pause').textContent=s.status==='preparing'?'取消准备':'暂停整局';
   $("stop").disabled = ["idle", "stopped", "preparing"].includes(s.status);
   $("start").textContent = s.status === "paused" ? "继续冒险" : "开始冒险";
   if (!settingsLoaded) {
     $("duration").value = s.settings.durationMinutes;
     $("world-select").value = s.settings.world;
     $("native-hud").checked = s.settings.nativeHudEnabled !== false;
+    $('minecraft-home').value=s.settings.minecraftHome||'';
     settingsLoaded = true;
   }
   for (const el of $("settings").elements)
@@ -116,9 +129,11 @@ $("settings").addEventListener("submit", (e) => {
       durationMinutes: Number($("duration").value),
       world: $("world-select").value,
         nativeHudEnabled: $("native-hud").checked,
+        minecraftHome:$('minecraft-home').value,
     },
   });
 });
+$('disable-streaming').onclick=()=>command('settings',{settings:{streamingEnabled:false,nativeHudEnabled:false}});
 $("overlay-url").textContent = location.origin + "/overlay?key=green";
 await refresh();
 setInterval(refresh, 1000);

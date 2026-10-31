@@ -9,6 +9,7 @@ import { ClientActions } from "./client-actions.mjs";
 import { VisionDiagnostics } from "./vision.mjs";
 import path from "node:path";
 import { DATA } from "./config.mjs";
+import {prepareEnvironment} from './environment.mjs';
 export class Runtime {
   constructor() {
     this.store = new Store();
@@ -29,6 +30,7 @@ export class Runtime {
           },
         });
     this.agent = new Agent(this);
+    this.environmentPrepare=prepareEnvironment;
     this.busy = false;
     this.lifecycle = 0;
     this.timer = setInterval(() => {
@@ -65,7 +67,7 @@ export class Runtime {
       throw e;
     }
   }
-  async prepare() {
+  async prepare({requireModel=true}={}) {
     if (this.busy) throw new Error("正在执行另一个操作。");
     if (["running", "pausing"].includes(this.store.status))
       throw new Error("请先暂停正在进行的冒险。");
@@ -73,8 +75,20 @@ export class Runtime {
     const epoch = this.lifecycle;
     this.store.status = "preparing";
     this.store.reason = "正在准备独立游戏世界和工具。";
+    this.preparationController=new AbortController();
     this.prepareTask = (async () => {
       try {
+        if(requireModel){
+          this.store.reason='正在核对 DSH 的 DeepSeek API 配置与余额。';
+          const balance=await this.refreshBalance();
+          if(!balance.available||balance.micros<1000000)throw new Error('DeepSeek 账户不可用或余额不足 ¥1，请在 DSH 配置官方API凭据并充值。');
+        }
+        await this.environmentPrepare(this.store.settings,{signal:this.preparationController.signal,onPhase:phase=>{
+          const labels={'control-dependencies':'正在补齐控制台依赖','python-git':'正在检查 Python 和 Git','java21':'正在检查或下载便携 Java21','tools-ready':'基础依赖已就绪','game-dependencies':'正在准备游戏环境','game-server':'正在准备独立游戏服务器','game-client':'正在复用已有游戏本体并补齐运行库','mcp-source':'正在获取固定版本 MCP','fabric-mods':'正在安装 Fabric 和动作辅助模组','mcp-runtime':'正在准备 MCP 运行依赖','java-build':'正在构建原生游戏辅助模组'};
+          this.store.reason=labels[phase]||'正在准备环境';
+        }});
+        this.preparationController.signal.throwIfAborted();
+        this.store.reason='正在启动并连接 Minecraft；完成后保存冻结。';
         await this.minecraft.start();
         await this.mcp.connect();
         this.observe(await this.mcp.status());
@@ -85,7 +99,6 @@ export class Runtime {
           this.store.status = "ready";
           this.store.reason = "准备完成，世界已暂停；点击开始冒险。";
         }
-        await this.refreshBalance();
         this.store.save();
       } catch (e) {
         this.store.status = "error";
@@ -145,6 +158,7 @@ export class Runtime {
   async pause(code = "operator", message = "已暂停整局，世界已保存。") {
     if (this.pauseTask) return this.pauseTask;
     this.lifecycle++;
+    this.preparationController?.abort();
     if (this.store.status === "paused" || this.store.status === "stopped")
       return;
     this.pauseTask = (async () => {
@@ -186,6 +200,7 @@ export class Runtime {
     }
   }
   async close() {
+    this.preparationController?.abort();
     clearInterval(this.timer);
     this.lifecycle++;
     this.vision?.clear();

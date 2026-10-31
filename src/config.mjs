@@ -19,7 +19,9 @@ export const DEFAULTS = {
   bubbleMinSeconds: 180,
   bubbleMaxSeconds: 300,
   bubbleDurationSeconds: 8,
-  nativeHudEnabled: true,
+  nativeHudEnabled: false,
+  streamingEnabled:false,
+  minecraftHome:'',
 };
 export function readSettings() {
   try {
