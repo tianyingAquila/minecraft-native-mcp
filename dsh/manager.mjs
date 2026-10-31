@@ -33,7 +33,7 @@ export class Launcher {
     if(!this.ready())throw Error('首次使用请先准备依赖。');
     if(this.child)throw Error('控制台正在启动，请稍候。');
     const output=fs.openSync(path.join(this.workspace,'logs/control.log'),'a');
-    this.child=this.spawn(process.execPath,['src/server.mjs'],{cwd:this.workspace,windowsHide:true,stdio:['ignore',output,output],env:process.env});fs.closeSync(output);
+    this.child=this.spawn(process.execPath,['src/server.mjs'],{cwd:this.workspace,windowsHide:true,stdio:['ignore',output,output],env:{...process.env,ELECTRON_RUN_AS_NODE:'1'}});fs.closeSync(output);
     this.child.once('exit',()=>{this.child=null;});this.child.once('error',e=>{this.error=e.message;this.child=null;});
     for(let i=0;i<50;i++){if(await this.ping())return;await new Promise(r=>setTimeout(r,200));}
     throw Error('控制台未能启动，请查看 logs/control.log。');

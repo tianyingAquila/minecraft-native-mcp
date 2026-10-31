@@ -22,3 +22,8 @@ test('已有外部控制台只连接打开，不冒领进程或停止原有游�
   await launcher.open();assert.equal(calls.length,1);assert.equal(calls[0][0],'explorer.exe');assert.equal(launcher.child,null);await launcher.stop();assert.equal(calls.length,1);
  }finally{assert.ok(path.resolve(workspace).startsWith(path.resolve(os.tmpdir())+path.sep));fs.rmSync(workspace,{recursive:true,force:true});}
 });
+test('DSH桌面宿主以Electron可执行文件启动控制台时明确使用Node模式',async()=>{
+ const workspace=fs.mkdtempSync(path.join(os.tmpdir(),'minecraft-plugin-electron-'));let spawned=false,options;
+ const l=new Launcher({workspace,fetchImpl:async()=>{if(!spawned)throw Error('not started');return {json:async()=>({app:'deepseek-minecraft-live'})};},spawnImpl:(exe,args,opts)=>{spawned=true;options=opts;return new EventEmitter();}});
+ try{l.seed();fs.mkdirSync(path.join(workspace,'logs'));l.ready=()=>true;await l.start();assert.equal(options.env.ELECTRON_RUN_AS_NODE,'1');assert.equal(options.windowsHide,true);}finally{assert.ok(path.resolve(workspace).startsWith(path.resolve(os.tmpdir())+path.sep));fs.rmSync(workspace,{recursive:true,force:true});}
+});
