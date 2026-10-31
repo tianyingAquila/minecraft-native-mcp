@@ -24,7 +24,7 @@ Node/Python 优先复用 DSH 运行时；缺少 Git/JDK21 时下载便携副本�
 
 工作目录默认是 `$DSH_HOME/minecraft-native-mcp`（通常 `%USERPROFILE%/.dsh/minecraft-native-mcp`）。存档在 `data`，下载和便携工具在 `runtime`，日志在 `logs`。更新插件后，停掉旧控制台再重新打开：默认托管目录会备份旧源码到 `data/backups` 后更新源码，保留存档、设置与运行依赖；已运行的控制台不会被热替换。自行设置 `config.projectDirectory` 的项目不自动覆盖，请自行更新代码。插件 JS 无需编译。
 
-卸载：`dsh plugin --profile desktop remove minecraft-native-mcp`，重新打开 DSH。禁用/退出插件会停止它自己拥有的准备任务及游戏控制台，不会关掉外部独立启动的控制台。需要清除下载和存档时，先备份世界，再手动移走工作目录。没有开机启动、系统服务或全局环境修改。也支持 `web` profile 和本地开发安装 `dsh plugin --profile desktop add link:<仓库绝对路径>`。
+卸载：`dsh plugin --profile desktop remove minecraft-native-mcp`，重新打开 DSH。禁用/退出插件会停止它自己拥有的准备任务及游戏控制台，不会关掉外部独立启动的控制台。需要清除下载和存档时，先备份世界，再手动移走工作目录。没有开机启动、系统服务或全局环境修改。也支持 `web` profile。开发时建议用独立测试 profile 安装打包文件，避免把日常环境直接链接到源码目录。
 
 ## 可选：直播扩展（单独安装）
 
