@@ -58,6 +58,7 @@ public final class FishLiveClient implements ClientModInitializer {
         router.register("fish.actionStart",ctx->ClientMc.call(FishActionObservation::begin));
         router.register("fish.actionFinish",ctx->ClientMc.call(FishActionObservation::finish));
         router.register("fish.context",ctx->ClientMc.call(FishLiveClient::context));
+        router.register("fish.containerState",ctx->ClientMc.call(FishContainerState::read));
         router.register("fish.spatialScan",ctx->ClientMc.call(FishSpatialScan::scan));
         router.register("fish.probeBlocks",ctx->ClientMc.call(()->{
             Gates.vision();JsonArray blocks=new JsonArray();

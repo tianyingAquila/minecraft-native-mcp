@@ -12,6 +12,7 @@ import { mineBlock } from './mining.mjs';
 import { digTunnel } from './tunnel.mjs';
 import { spatialOverview } from './spatial.mjs';
 import {gameWorldName,readPrepared} from './versions.mjs';
+import {describeContainer,loadCookingIndex} from './container-state.mjs';
 const ALLOWED = new Set([
   "agent_brief",
   "observe",
@@ -101,7 +102,7 @@ const CUSTOM = [
   },
   {
     name: "get_container",
-    description: "读取当前打开的工作台、背包或容器格子。",
+    description: "读取当前窗口类型、实际格子/用途/空槽、光标物品、原生取放条件与可用进度；支持工作台、熔炉、酿造台、铁砧、锻造台、交易等已知布局。slots是物品，emptySlots是空格，slotRules按相同原生条件分组；窗口menuSlot不同于背包inventorySlot。未知布局明确标未知。按blockers处理阻塞，不假设已产出或按钮已操作。",
     inputSchema: schema(),
   },
   {
@@ -191,6 +192,7 @@ export class ClientActions {
   }
   async connect({signal}={}) {
     if (this.client) return;
+    this.nativeContainerCapability=undefined;
     if (this.nativeClient)
       this.bridge = await this.nativeClient.start(this.store.settings,{signal});
     const identity = await this.bridge.call("session.info");
@@ -200,6 +202,7 @@ export class ClientActions {
         "当前游戏玩家不是 DeepSeekFish。",
       );
     this.worldId = identity.worldId;
+    this.cookingIndex=loadCookingIndex(ROOT,this.store?.settings.resolvedVersion||readPrepared()?.version);
     await this.bridge.call("fish.navigationStatus");
     const base = path.join(ROOT, "bundled/mcpfabric");
     const [{ AgentRuntime }, { AGENT_TOOLS, AgentSession }] = await Promise.all(
@@ -224,6 +227,10 @@ export class ClientActions {
         inputSchema: z.toJSONSchema(d.validator),
       }))
       .concat(CUSTOM);
+    for(const tool of this.catalogue){
+      if(tool.name==='container_transfer')tool.description+=' 返回实际移动后的结构化container格子与熔炉blockers。direction=take取出指定物品；输出槽阻塞应取出旧产物，补煤无效。';
+      if(tool.name==='close_container')tool.description='关闭当前实际打开的容器；返回关闭后的真实界面状态。已经关闭时会返回SCREEN_ALREADY_CLOSED，不要重复关闭，更不会因此让熔炉开始烧。';
+    }
     const proxy = { call: (method, args = {}) => this.upstreamCall(method, args) };
     fs.mkdirSync(DATA, { recursive: true });
     this.rt = new AgentRuntime(proxy, {
@@ -266,8 +273,15 @@ export class ClientActions {
         return value;
   }
   async containerState(signal) {
-    let state = await this.bridge.call('container.state', {}, {signal});
-    if (this.menuOpenedAt == null) return state;
+    const read=async()=>{
+      if(this.nativeContainerCapability!==false){
+        try{const result=await this.bridge.call('fish.containerState',{}, {signal});if(typeof result.open==='boolean')return result;this.nativeContainerCapability=false;}
+        catch(error){if(error.code!=='GAME_unknown_method')throw error;this.nativeContainerCapability=false;}
+      }
+      return this.bridge.call('container.state',{}, {signal});
+    };
+    let state = await read();
+    if (this.menuOpenedAt == null) return describeContainer(state,this.cookingIndex);
     const openedAt = this.menuOpenedAt;
     // An open menu can precede its item packets. Never treat that first empty frame as contents.
     let previous = '', stable = 0;
@@ -278,10 +292,10 @@ export class ClientActions {
       const age = Date.now()-openedAt;
       if (state.open && stable >= 1 && age >= (state.slots?.length ? 200 : 750)) break;
       await delay(100,undefined,{signal});
-      state = await this.bridge.call('container.state', {}, {signal});
+      state = await read();
     }
     this.menuOpenedAt = null;
-    return state;
+    return describeContainer(state,this.cookingIndex);
   }
   async assertReady() {
     if (this.nativeClient && !this.nativeClient.running())
@@ -334,16 +348,12 @@ export class ClientActions {
         : { owner: "idle", activeAction: null },
     );
     const menu = await this.containerState();
-    summary.result.situation.openMenu = menu.open ? menu : null;
+    summary.result.situation.openMenu = menu.open||menu.screenVisible ? menu : null;
     summary.result.situation.context = await this.bridge.call('fish.context');
     const spatial=await this.spatialStatus(false);
     // Keep spatial information early in the observation rather than behind long entity lists.
     summary.result.situation={spatial,...summary.result.situation};
     if(menu.open && this.rt?.openContainer) summary.result.situation.openMenu.position = this.rt.openContainer.pos;
-    if (menu.open && ['minecraft:furnace','minecraft:blast_furnace','minecraft:smoker'].includes(menu.type)) {
-      summary.result.situation.openMenu.slotRoles = {input:0,fuel:1,output:2};
-      summary.result.situation.openMenu.fuelSlotEmpty = !menu.slots.some(s=>s.slot===1);
-    }
     return summary;
   }
   async spatialStatus(detail=false,signal) {
@@ -399,14 +409,31 @@ export class ClientActions {
           return {...value, evidence};
         } catch { return {...value, evidenceUnavailable:true}; }
       };
+      if(['close_container','close_game_screen'].includes(name)){
+        const before=await this.bridge.call('screen.get',{}, {signal:combined});
+        if(before.screen==='none'){
+          if(this.rt)this.rt.openContainer=undefined;
+          return {state:'not_executed',error:'SCREEN_ALREADY_CLOSED',screen:'none',message:'当前容器界面已经关闭，本次没有执行新动作。不要再次关闭；以当前格子/配方和阻塞原因决定下一步。关闭界面不会改变熔炉产物冲突。'};
+        }
+      }
       let result;
       const def = this.definitions.get(name);
       if (def) {
         const parsed = def.validator.parse(args);
         result = await this.execution.run(combined, () => def.run(this.rt, this.session, parsed));
         combined.throwIfAborted();
-        if(name==='open_container' && typeof result==='string' && !result.startsWith('opened '))return await withEvidence({state:'failed',result});
-        if(name==='container_transfer' && typeof result==='string' && /^(put|took) nothing\b/.test(result))return await withEvidence({state:'failed',result:'没有物品实际移动，请核对物品是否能放进当前容器格子。\n'+result});
+        if(['open_container','container_transfer'].includes(name)){
+          const container=await this.containerState(combined);
+          if(name==='open_container' && typeof result==='string' && !result.startsWith('opened '))return await withEvidence({state:'failed',result,container});
+          if(name==='container_transfer' && typeof result==='string' && /^(put|took) nothing\b/.test(result))return await withEvidence({state:'failed',result:'没有物品实际移动，请核对物品是否能放进当前容器格子。\n'+result,container});
+          return await withEvidence({state:'succeeded',result,container});
+        }
+        if(name==='close_container'){
+          const screen=await this.bridge.call('screen.get',{}, {signal:combined});
+          const container=await this.containerState(combined);
+          if(screen.screen==='container'||container.open)throw new ServiceError('SCREEN_CLOSE_NOT_CONFIRMED','关闭后仍检测到容器，不能报告已关闭；请检查实际界面。');
+          return {state:'succeeded',result:{closed:true,screen:screen.screen,externalContainerOpen:false}};
+        }
         if (JOBS.has(name)) {
           let job = this.rt.jobs.get(undefined, this.session.id);
           while (job?.state === "running") {

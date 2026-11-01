@@ -45,7 +45,8 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": true
+        "nativeHud": true,
+        "nativeContainers": true
       }
     },
     {
@@ -89,7 +90,8 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": true
+        "nativeHud": true,
+        "nativeContainers": false
       }
     },
     {
@@ -133,7 +135,8 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": true
+        "nativeHud": true,
+        "nativeContainers": false
       }
     },
     {
@@ -177,7 +180,8 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": true
+        "nativeHud": true,
+        "nativeContainers": false
       }
     },
     {
@@ -221,7 +225,8 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": true
+        "nativeHud": true,
+        "nativeContainers": true
       }
     },
     {
@@ -265,7 +270,8 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": true
+        "nativeHud": true,
+        "nativeContainers": false
       }
     },
     {
@@ -309,7 +315,8 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": true
+        "nativeHud": true,
+        "nativeContainers": false
       }
     },
     {
@@ -353,7 +360,8 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": true
+        "nativeHud": true,
+        "nativeContainers": false
       }
     },
     {
@@ -397,7 +405,8 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": true
+        "nativeHud": true,
+        "nativeContainers": false
       }
     },
     {
@@ -442,7 +451,8 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": true
+        "nativeHud": true,
+        "nativeContainers": false
       }
     },
     {
@@ -487,7 +497,8 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": true
+        "nativeHud": true,
+        "nativeContainers": false
       }
     },
     {
@@ -532,7 +543,8 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": true
+        "nativeHud": true,
+        "nativeContainers": true
       }
     }
   ]

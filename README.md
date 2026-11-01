@@ -2,7 +2,7 @@
 
 [English](docs/README.en.md) · [兼容与验证](docs/compatibility.md) · [架构与开发](docs/architecture.md) · [直播扩展](docs/streaming.md)
 
-让 DeepSeek 或其他 MCP 客户端操作真正的 Minecraft Java 生存玩家。保留原生第一视角、血条、饱食度和物品栏，提供空间概览、采集合成、寻路战斗、连续矿道和异常截图诊断。
+让 DeepSeek 或其他 MCP 客户端操作真正的 Minecraft Java 生存玩家。保留原生第一视角、血条、饱食度和物品栏，提供空间概览、采集合成、寻路战斗、连续矿道和异常截图诊断。容器观察统一提供真实槽位/用途、空格、光标持物、原生取放条件和可用进度；熔炉等窗口会给出明确阻塞原因。
 
 ## DSH 安装与开始
 

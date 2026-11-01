@@ -9,6 +9,7 @@ import subprocess
 import zipfile
 import re
 from artifact_fetch import fetch_bytes
+from cooking_index import write_cooking_index
 
 ROOT=Path(__file__).resolve().parents[1]
 MATRIX=json.loads((ROOT/'versions.json').read_text(encoding='utf-8'))
@@ -85,6 +86,7 @@ def main():
             target=output/'mcpfabric.jar';shutil.copy2(deps/'mcpfabric.jar',target);row['mcpCompat']={'path':f'{version}/mcpfabric.jar','sha256':hashlib.sha256(target.read_bytes()).hexdigest()}
         row['compiled']=True;existing['versions'][version]=row
         cached_client=Path.home()/'.gradle/caches/fabric-loom'/version/'minecraft-client.jar'
+        row['cooking']=write_cooking_index(cached_client,version,output)
         with zipfile.ZipFile(cached_client) as zip:
             internal=json.loads(zip.read('version.json'));pack=internal['pack_version']
             entry['dataPackVersion']={'major':pack.get('data',pack.get('data_major'))}

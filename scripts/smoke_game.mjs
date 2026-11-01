@@ -33,6 +33,23 @@ try{
  const look=await runtime.mcp.execute('look_at',{x:.5,y:200.5,z:2.5});assert.equal(look.state,'succeeded');
  const mined=await runtime.mcp.execute('mine_block',{x:0,y:200,z:2},{remainingMs:()=>30000});assert.equal(mined.state,'succeeded');
  const after=await b.call('fish.probeBlocks',{positions:[{x:0,y:200,z:2}]});assert.doesNotMatch(JSON.stringify(after),/oak_log/);record('real-mine',{state:mined.state});
+ for(const [block,size,role] of [['furnace',3,'output'],['chest',27,'storage'],['crafting_table',10,'crafting_input'],['brewing_stand',5,'ingredient'],['anvil',3,'secondary_input'],['smithing_table',4,'template']]){
+  await b.call('container.close');
+  const items=block==='furnace'?'{Items:[{Slot:0b,id:"minecraft:raw_iron",count:2},{Slot:1b,id:"minecraft:coal",count:1},{Slot:2b,id:"minecraft:copper_ingot",count:1}]}':'';
+  runtime.minecraft.command('setblock 0 200 2 minecraft:'+block+items);
+  const deadline=Date.now()+10000;while(!JSON.stringify(await b.call('fish.probeBlocks',{positions:[{x:0,y:200,z:2}]})).includes('minecraft:'+block)){if(Date.now()>deadline)throw Error('Container fixture did not sync: '+block);await sleep(100);}
+  const opened=await runtime.mcp.execute('open_container',{x:0,y:200,z:2});assert.equal(opened.state,'succeeded');const menu=opened.container;
+  assert.equal(menu.size,size);assert.ok(role in menu.slotRoles);assert.ok(menu.slotRules?.length);assert.ok(menu.playerMenuSlots.length>=36);assert.equal(menu.carried.empty,true);
+  if(block==='furnace'){assert.ok(menu.properties.length>=4);assert.equal(menu.furnace.status,'output_blocked');}
+  record('native-container',{type:menu.type,size});
+ }
+ await runtime.mcp.execute('close_container');
+ runtime.minecraft.command('summon minecraft:villager 2 200 0 {NoAI:1b,Invulnerable:1b,PersistenceRequired:1b,VillagerData:{type:"minecraft:plains",profession:"minecraft:farmer",level:2},Offers:{Recipes:[{buy:{id:"minecraft:emerald",count:1},sell:{id:"minecraft:bread",count:1},maxUses:10}]}}');
+ const merchantDeadline=Date.now()+15000;let villager;
+ do{const nearby=await b.call('perception.entities',{radius:6,kinds:[]});villager=nearby.entities.find(e=>e.type==='minecraft:villager');if(Date.now()>merchantDeadline)throw Error('Merchant fixture did not spawn');if(!villager)await sleep(100);}while(!villager);
+ await b.call('interact.useEntity',{uuid:villager.uuid});let trade;
+ do{await sleep(100);trade=await b.call('fish.containerState');if(Date.now()>merchantDeadline)throw Error('Merchant offers did not synchronize');}while(trade.type!=='minecraft:merchant'||!trade.tradeOffers?.length);
+ assert.equal(trade.tradeOffers[0].result.id,'minecraft:bread');record('native-merchant',{offers:trade.tradeOffers.length});await b.call('container.close');
  const frame=await b.call('fish.screenshot');assert.equal(frame.format,'png');assert.ok(frame.width>0&&frame.width<=1280&&frame.base64.length>100);fs.writeFileSync(path.join(out,'game.png'),Buffer.from(frame.base64,'base64'));record('game-frame',{width:frame.width,height:frame.height});
  runtime.store.settings.streamingEnabled=true;runtime.store.settings.nativeHudEnabled=true;runtime.store.say('测试：木头到手了，看看前方。','preview');
  const hudDeadline=Date.now()+6000;let hud;
