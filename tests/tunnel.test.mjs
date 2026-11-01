@@ -54,3 +54,9 @@ test('只有schema中的数字字段兼容数字字符串，其他错误类型�
   for(const invalid of ['', ' ',false,null,'Infinity','1;exit'])assert.equal(normalizeToolArgs(invalid,{type:'number'}),invalid);
   const actions=new ClientActions();actions.catalogue=[{name:'mine_block',inputSchema:schema}];assert.equal(actions.normalizeArgs('mine_block',{x:'-41'}).x,-41);
 });
+test('新环境在挖开后出现就交回决策，同一已知环境不每步重复打断',async()=>{
+ const w=world();let reads=0;
+ w.discover=async since=>({sequence:++reads===1?3:4,updates:since===undefined?[]:[{sequence:4,salient:true,label:'疑似矿井'}]});
+ const stopped=await digTunnel({direction:'east',length:5},w);assert.equal(stopped.reason,'new_environment');assert.equal(stopped.brokenBlocks,1);assert.equal(stopped.completedSteps,0);assert.equal(stopped.discovery.updates[0].label,'疑似矿井');
+ const known=world();known.discover=async()=>({sequence:4,updates:[]});assert.equal((await digTunnel({direction:'east',length:2},known)).completedSteps,2);
+});

@@ -41,6 +41,14 @@ test('动作短句与动作共用一次模型请求，say不泄漏给严格游�
  const a=new Agent(r,{balanceFn:async()=>({micros:20000000,currency:'CNY',available:true,checkedAt:Date.now()}),chatFn:async body=>{charged++;assert.ok(body.tools[0].function.parameters.required.includes('say'));return {choices:[{message:{tool_calls:[{id:'action',type:'function',function:{name:'collect_blocks',arguments:'{"count":1,"say":"先去收集一些木头。"}'}}]}}]};}});
  a.load=()=>{};a.save=()=>{};r.agent=a;await a.begin({maxRounds:1});assert.equal(charged,1);assert.equal(r.store.overlayState().commentary.text,'先去收集一些木头。');
 });
+test('新环境信息进入决策并允许反应，同一发现不在下一轮重复标新',async()=>{
+ const r=fakeRuntime();let calls=0;const event={id:'mine-1',sequence:1,at:Date.now(),salient:true,label:'疑似废弃矿井'};
+ r.mcp.status=async()=>({result:{situation:{vitals:{health:20},spatial:{environment:{updates:[event]}}}}});
+ r.mcp.tools=()=>[{type:'function',function:{name:'travel_to',parameters:{type:'object',properties:{},additionalProperties:false}}}];
+ r.mcp.execute=async()=>({state:'succeeded',result:'moved'});
+ const a=new Agent(r,{balanceFn:async()=>({micros:20000000,currency:'CNY',available:true,checkedAt:Date.now()}),chatFn:async body=>{calls++;const current=body.messages.at(-1).content;assert.ok(calls===1?current.includes('mine-1'):!current.includes('mine-1'));return {choices:[{message:{tool_calls:[{id:'env-'+calls,type:'function',function:{name:'travel_to',arguments:JSON.stringify({say:'先靠近看看有没有安全的入口。',...(calls===1?{reaction:'诶，这里好像有废弃矿井！'}:{})})}}]}}]};}});
+ a.load=()=>{};a.save=()=>{};r.agent=a;await a.begin({maxRounds:2});assert.equal(r.store.reactionSeq,1);assert.equal(r.store.reaction.text,'诶，这里好像有废弃矿井！');
+});
 test('真实事件反应与下一步行动共用决策，元数据不传给严格游戏工具',async()=>{
  const r=fakeRuntime();let calls=0,executed=0;
  r.mcp.tools=()=>[{type:'function',function:{name:'attack_entity',parameters:{type:'object',properties:{uuid:{type:'string'}},required:['uuid'],additionalProperties:false}}}];

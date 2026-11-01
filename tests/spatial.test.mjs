@@ -13,6 +13,11 @@ function terrain(block,{yaw=180,inWater=false,openSky=false}={}) {
   }
   return {version:1,origin,size,palette,cells:data.toString('base64'),knownCells,at:1000,openSkyAtPlayer:openSky,player:{x:.5,y:64,z:.5,eyeY:65.62,yaw,inWater}};
 }
+test('隐藏在石墙后的矿井方块不进入环境推断，当前群系可直接保留',()=>{
+ const scan=terrain((x,y,z)=>x===3?STONE:x===4&&y===65&&z===0?{id:'minecraft:cobweb',flags:0}:x===4&&y===64&&z===0?{id:'minecraft:rail',flags:0}:y<64?STONE:AIR);
+ scan.biome='minecraft:lush_caves';scan.dimension='minecraft:overworld';
+ const s=spatialOverview(scan);assert.equal(s.environment.biome.id,'minecraft:lush_caves');assert.equal(s.environment.candidates.some(c=>c.id==='mineshaft'),false);
+});
 const front=s=>s.directions.find(d=>d.relative==='前方');
 test('平地空间全方向开阔，朝向旋转使左右跟着改变，详细切片尺寸有界',()=>{
   const scan=terrain((x,y,z)=>y<64?STONE:AIR,{openSky:true}),s=spatialOverview(scan,{detail:true});

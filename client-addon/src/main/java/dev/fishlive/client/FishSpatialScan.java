@@ -50,6 +50,7 @@ final class FishSpatialScan {
             buffer.putShort(index.shortValue());
         }
         JsonObject out=new JsonObject();out.addProperty("version",1);out.addProperty("dimension",level.dimension().location().toString());
+        out.addProperty("biome",level.getBiome(feet).unwrapKey().map(key->key.location().toString()).orElse("unknown"));
         JsonArray origin=new JsonArray();origin.add(ox);origin.add(oy);origin.add(oz);out.add("origin",origin);
         JsonArray size=new JsonArray();size.add(sx);size.add(sy);size.add(sz);out.add("size",size);
         JsonObject player=new JsonObject();player.addProperty("x",p.getX());player.addProperty("y",p.getY());player.addProperty("z",p.getZ());player.addProperty("eyeY",p.getEyeY());player.addProperty("yaw",p.getYRot());player.addProperty("inWater",p.isInWater());player.addProperty("onGround",p.onGround());player.addProperty("halfWidth",p.getBbWidth()/2.0);out.add("player",player);

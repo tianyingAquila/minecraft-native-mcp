@@ -79,6 +79,9 @@ function render(s) {
   const space=s.spatial;
   $("spatial-summary").textContent=space?.available?[
     `范围：周围${space.range.horizontal}格，上下${space.range.vertical}格；朝向${space.heading}°。${space.local.ceiling}。`,
+    ...(space.environment?.biome?[`当前位置群系：${space.environment.biome.name}（客户端实测）。`]:[]),
+    ...(space.environment?.candidates||[]).map(c=>`环境线索：${c.label}。${c.note}`),
+    ...(space.environment?.updates||[]).map(e=>`本次出现：${e.label}；请结合危险和目标评估。`),
     ...space.directions.map(d=>`${d.relative}（${d.compass}）：${d.view}；2/6/12格处宽度 ${d.widthAt2_6_12.map(n=>n??'?').join('/')}。${d.shape??''}${d.entry?d.entry.distance+'格外'+d.entry.ground+(d.entry.drop!==undefined?'，落差约'+d.entry.drop+'格':'')+'。':''}${d.visible.map(v=>v.type+(v.density?' '+v.density:'')+' 约'+v.distance+'格').join('；')}`),
     '候选通路来自地形计算，尚未验证实际能走；?代表未确认。数据仅对应本轮朝向和位置。',
   ].join('\n'):space?.reason??'准备游戏后显示。';
@@ -187,4 +190,4 @@ $('choose-directory').onclick=async()=>{if(directoryBusy)return;directoryBusy=tr
 function focusDirectory(){$('error-dialog').close();$('settings').scrollIntoView({behavior:'smooth',block:'center'});$('minecraft-home').focus();}
 $('fix-directory').onclick=focusDirectory;$('dialog-directory').onclick=focusDirectory;
 $('retry-setup').onclick=()=>command('prepare');$('dialog-retry').onclick=()=>{$('error-dialog').close();void command('prepare');};$('dialog-dismiss').onclick=()=>$('error-dialog').close();
-$('copy-diagnostics').onclick=async()=>{const s=latestState;const text=JSON.stringify({version:'0.3.1',status:s.status,game:s.settings.resolvedVersion||s.settings.minecraftVersion,environment:s.environment,setup:s.setup,events:s.events.slice(-8)},null,2);try{await navigator.clipboard.writeText(text);$('notice').textContent='诊断信息已复制，可发给维护者排查。';}catch{$('problem-detail').textContent=text;$('problem-detail').parentElement.open=true;}};
+$('copy-diagnostics').onclick=async()=>{const s=latestState;const text=JSON.stringify({version:'0.3.2',status:s.status,game:s.settings.resolvedVersion||s.settings.minecraftVersion,environment:s.environment,setup:s.setup,events:s.events.slice(-8)},null,2);try{await navigator.clipboard.writeText(text);$('notice').textContent='诊断信息已复制，可发给维护者排查。';}catch{$('problem-detail').textContent=text;$('problem-detail').parentElement.open=true;}};

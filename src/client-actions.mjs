@@ -13,6 +13,7 @@ import { digTunnel } from './tunnel.mjs';
 import { spatialOverview } from './spatial.mjs';
 import {gameWorldName,readPrepared} from './versions.mjs';
 import {describeContainer,loadCookingIndex} from './container-state.mjs';
+import {DiscoveryTracker} from './discovery.mjs';
 const ALLOWED = new Set([
   "agent_brief",
   "observe",
@@ -189,6 +190,7 @@ export class ClientActions {
     this.catalogue = [];
     this.active = null;
     this.execution = new AsyncLocalStorage();
+    this.discoveries=new DiscoveryTracker();
   }
   async connect({signal}={}) {
     if (this.client) return;
@@ -201,6 +203,7 @@ export class ClientActions {
         "GAME_IDENTITY",
         "当前游戏玩家不是 DeepSeekFish。",
       );
+    if(this.worldId&&this.worldId!==identity.worldId)this.discoveries=new DiscoveryTracker();
     this.worldId = identity.worldId;
     this.cookingIndex=loadCookingIndex(ROOT,this.store?.settings.resolvedVersion||readPrepared()?.version);
     await this.bridge.call("fish.navigationStatus");
@@ -228,6 +231,7 @@ export class ClientActions {
       }))
       .concat(CUSTOM);
     for(const tool of this.catalogue){
+      if(['travel_to','explore','collect_blocks','dig_tunnel'].includes(tool.name))tool.description+=' 途中出现本次尚未见过的重要环境线索时可提前中断并返回discovery，由你评估探索、绕开或记位置，不代表原任务完成。';
       if(tool.name==='container_transfer')tool.description+=' 返回实际移动后的结构化container格子与熔炉blockers。direction=take取出指定物品；输出槽阻塞应取出旧产物，补煤无效。';
       if(tool.name==='close_container')tool.description='关闭当前实际打开的容器；返回关闭后的真实界面状态。已经关闭时会返回SCREEN_ALREADY_CLOSED，不要重复关闭，更不会因此让熔炉开始烧。';
     }
@@ -360,12 +364,18 @@ export class ClientActions {
     try {
       const scan=await this.bridge.call('fish.spatialScan',{}, {signal});
       const started=performance.now(),overview=spatialOverview(scan,{detail});
+      this.discoveries.observe(overview.environment,overview.origin);
+      overview.environment.updates=this.discoveries.since();
       if(this.store)this.store.performance.spatial={scanMs:scan.scanMs,summaryMs:Math.round(performance.now()-started),chars:JSON.stringify(overview).length};
       return overview;
     } catch(error) {
       signal?.throwIfAborted();
       return {available:false,reason:'本轮空间测量不可用；不要推断为四周封闭，按需查具体方块或截图。'};
     }
+  }
+  async discoveryStatus(since=Infinity,signal){
+    const overview=await this.spatialStatus(false,signal);
+    return {sequence:this.discoveries.sequence,environment:overview.environment,updates:this.discoveries.since(since)};
   }
   async execute(name, args = {}, { signal, remainingMs = () => 300000 } = {}) {
     args=this.normalizeArgs(name,args);
@@ -417,6 +427,9 @@ export class ClientActions {
         }
       }
       let result;
+      const watchDiscoveries=['travel_to','explore','collect_blocks'].includes(name);
+      const discoveryStart=watchDiscoveries?(await this.discoveryStatus(undefined,combined)).sequence:0;
+      let lastDiscoveryCheck=0;
       const def = this.definitions.get(name);
       if (def) {
         const parsed = def.validator.parse(args);
@@ -441,6 +454,13 @@ export class ClientActions {
             if (remainingMs() <= 0)
               throw new DOMException("本场时长已到", "AbortError");
             job = await this.rt.jobs.wait(job.id, 1000, this.session.id);
+            if(watchDiscoveries&&job?.state==='running'&&Date.now()-lastDiscoveryCheck>=2000){
+              lastDiscoveryCheck=Date.now();const found=await this.discoveryStatus(discoveryStart,combined);
+              if(found.updates.some(e=>e.salient)){
+                await this.rt.jobs.cancelOwnedBy(this.session.id);
+                return await withEvidence({state:'interrupted',result:{reason:'new_environment',discovery:found,previousGoal:args,message:'出现新环境线索，机械任务已停止；先评估现场，不把原目标当作已完成。'},progress:job.log.slice(-5)});
+              }
+            }
           }
           if (job)
             return await withEvidence({
@@ -478,7 +498,7 @@ export class ClientActions {
       this.bridge.call(method, params, { signal });
     if(name==='inspect_space')return this.spatialStatus(true,signal);
     if(name==='dig_tunnel') {
-      try{return await digTunnel(args,{call,signal});}
+      try{return await digTunnel(args,{call,signal,discover:since=>this.discoveryStatus(since,signal)});}
       finally{await this.bridge.call('fish.cancel').catch(()=>{});}
     }
     if(name==='wait_for_game'){

@@ -13,7 +13,7 @@ import { unwrap } from "./mcp.mjs";
 import { VISION_TOOL } from "./vision.mjs";
 import { ProgressGuard } from './progress.mjs';
 import {encodeObservation,requestUsage} from './observation.mjs';
-import {withCommentary,shortCommentary,actionCommentary,failureCommentary,actionFeedback,reactionAllowed} from './commentary.mjs';
+import {withCommentary,shortCommentary,actionCommentary,failureCommentary,actionFeedback,reactionAllowed,reactionEventKey} from './commentary.mjs';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const localTools = [
   {
@@ -60,6 +60,7 @@ export class Agent {
     this.lastAction = null;
     this.feedback = null;
     this.reactedEvent = null;
+    this.seenDiscoveries=new Set();
   }
   get sessionFile() {
     const version=this.store.settings.resolvedVersion||'1.21.4';
@@ -123,6 +124,8 @@ export class Agent {
       }
       let phaseAt=Date.now();
       const snapshot = await this.updateStatus();
+      const discoveries=snapshot?.result?.situation?.spatial?.environment?.updates;
+      if(discoveries)snapshot.result.situation.spatial.environment.updates=discoveries.filter(e=>!this.seenDiscoveries.has(e.id));
       this.currentSnapshot = snapshot;
       this.feedback = actionFeedback(this.lastAction,snapshot);
       this.store.performance.stateMs=Date.now()-phaseAt;
@@ -213,6 +216,8 @@ export class Agent {
       this.store.usage.completion += usage.completion_tokens || 0;
       this.store.usage.cached += usage.prompt_cache_hit_tokens || 0;
       const message = response.choices[0].message;
+      for(const e of snapshot?.result?.situation?.spatial?.environment?.updates||[])this.seenDiscoveries.add(e.id);
+      while(this.seenDiscoveries.size>128)this.seenDiscoveries.delete(this.seenDiscoveries.values().next().value);
       const group = [
         {
           role: "assistant",
@@ -331,9 +336,10 @@ export class Agent {
     if (this.mcp.execute) {
       const spoken=!this.mcp.isReadOnly?.(name)?actionCommentary(name,say):'';
       const response=shortCommentary(reaction);
-      if(spoken && response && reactionAllowed(this.feedback,this.currentSnapshot) && this.reactedEvent!==this.feedback.id) {
-        this.store.sayReaction(response,this.feedback.id);
-        this.reactedEvent=this.feedback.id;
+      const reactionKey=reactionEventKey(this.feedback,this.currentSnapshot);
+      if(spoken && response && reactionAllowed(this.feedback,this.currentSnapshot) && this.reactedEvent!==reactionKey) {
+        this.store.sayReaction(response,reactionKey);
+        this.reactedEvent=reactionKey;
       }
       this.store.say(spoken,name);
       this.store.event("游戏动作：" + name);

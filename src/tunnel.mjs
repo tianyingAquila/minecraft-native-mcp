@@ -8,12 +8,14 @@ const stop = reason => { throw new TunnelStop(reason); };
 const same = (a,b) => a.x===b.x && a.y===b.y && a.z===b.z;
 
 // A finite mechanical action. Direction, depth and whether to continue belong to the model.
-export async function digTunnel(args, {call, signal, sleep = ms => delay(ms, undefined, {signal}), now = Date.now} = {}) {
+export async function digTunnel(args, {call, signal, discover, sleep = ms => delay(ms, undefined, {signal}), now = Date.now} = {}) {
   const vector = DIRECTIONS[args.direction], length=args.length, slope=args.slope??'level';
   if (!vector || !Number.isInteger(length) || length<1 || length>12 || !['level','down'].includes(slope)) throw new Error('矿道方向限north/south/east/west，长度1–12格，坡度level/down');
   const started=now(), deadline=started+90000;
   const result={status:'interrupted', direction:args.direction, slope, requestedSteps:length, completedSteps:0, brokenBlocks:0, encountered:[]};
   let initial, stepPositions, floor, cut, lastSelf;
+  let discoveryStart;
+  const checkDiscovery=async()=>{if(!discover)return;const found=await discover(discoveryStart);if(found.updates?.some(e=>e.salient)){result.discovery=found;stop('new_environment');}};
   const guard = async () => {
     signal?.throwIfAborted();
     if (now()>=deadline) stop('time_budget');
@@ -31,7 +33,7 @@ export async function digTunnel(args, {call, signal, sleep = ms => delay(ms, und
     if (above?.falling) stop('falling_ceiling');
     for (const pos of cut) {
       const block=blocks.find(b=>same(b,pos));
-      if (block.falling || block.blockEntity || block.hardness<0) stop('unsafe_or_protected_block');
+      if (block.falling || block.blockEntity || block.hardness<0) {result.obstacle={id:block.id,position:pos,falling:block.falling,blockEntity:block.blockEntity,hardness:block.hardness};stop('unsafe_or_protected_block');}
     }
     const inv=await call('player.getInventory');
     if ([...inv.hotbar,...inv.main].length>=36) stop('inventory_full');
@@ -42,6 +44,7 @@ export async function digTunnel(args, {call, signal, sleep = ms => delay(ms, und
   try {
     await call('fish.cancel'); await call('screen.close');
     initial=lastSelf=await call('player.getState');
+    if(discover)discoveryStart=(await discover()).sequence;
     if (!initial.onGround || Math.abs(initial.y-Math.round(initial.y))>.15) stop('need_stable_full_block_ground');
     const origin={x:Math.floor(initial.x),y:Math.round(initial.y),z:Math.floor(initial.z)};
     for (let step=1;step<=length;step++) {
@@ -59,6 +62,7 @@ export async function digTunnel(args, {call, signal, sleep = ms => delay(ms, und
           result.brokenBlocks++;
           if (/_ore$|ancient_debris$/.test(broke.broke)) result.encountered.push({id:broke.broke,position:pos});
           await call('fish.cancel');
+          await checkDiscovery();
         }
       }
       const beforeWalk=await guard();
@@ -79,6 +83,7 @@ export async function digTunnel(args, {call, signal, sleep = ms => delay(ms, und
       }
       await call('fish.cancel');
       result.completedSteps++;
+      await checkDiscovery();
     }
     result.status='completed'; result.reason='requested_length_reached';
   } catch(error) {

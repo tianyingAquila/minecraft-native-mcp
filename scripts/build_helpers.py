@@ -44,7 +44,7 @@ def sources(version):
                 text=re.sub(r'graphics\.pose\(\)\.translate\(([^;\n]*), 0\)',r'graphics.pose().translate(\1)',text)
             if minor>=9:text=text.replace('p.getGameProfile().getName()','p.getGameProfile().name()').replace('mc.getWindow().getWindow()','mc.getWindow().handle()')
             if minor>=11:
-                text=text.replace('ResourceLocation','Identifier').replace('level.dimension().location()','level.dimension().identifier()')
+                text=text.replace('ResourceLocation','Identifier').replace('level.dimension().location()','level.dimension().identifier()').replace('key.location()','key.identifier()')
             text=text.replace('p.server.tickRateManager()','p.level().getServer().tickRateManager()')
             file.write_text(text,encoding='utf-8')
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2
+
+- Make pathfinding turn the visible first-person camera toward the path, including turns, with native smoothing.
+- Add current client biome and evidence-based environment candidates from ray-visible blocks, with repeated sightings deduplicated.
+- Interrupt long mining/travel/collection when newly observed important surroundings need a fresh decision; preserve the actual partial result.
+- Permit a natural, optional discovery reaction and require reassessing exploration opportunities without forcing exploration or claiming a possible structure is confirmed.
+- Show biome and environment clues in the dashboard spatial details.
+
 ## 0.3.1
 
 - Read the actual container screen, empty slots, cursor-held items, inventory/menu slot mapping, native placement/pickup rules and synchronized UI properties. Group repeated rules to keep observations compact.

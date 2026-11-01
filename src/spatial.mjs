@@ -1,4 +1,5 @@
 // Geometry measurements, not language-model guesses. All coordinates are world coordinates.
+import {describeEnvironment} from './discovery.mjs';
 const F={solid:1,support:2,water:4,lava:8,hazard:16,falling:32,log:64,leaves:128,ore:256,poi:512,partial:1024};
 const REL=['前方','右前方','右侧','右后方','后方','左后方','左侧','左前方'];
 const ABS=['南','西南','西','西北','北','东北','东','东南'];
@@ -122,6 +123,9 @@ export function spatialOverview(scan,{detail=false}={}) {
     limits:'方位相对本次朝向；visible仅为射线可见表面。candidate是加载地形的保守连通估计，可能需绕行，不等于可直接走到；半砖/楼梯、跳跃、游泳、攀爬未做路径验证。宽度null=未确认，最大9为采样上限；范围外/未加载不推断封闭。',
     coverage:{knownRatio:round(scan.knownCells/count*100),unknownRays,connectedFloorCells:nodes.size,connectivityCapped:capped},
   };
+  const seenBlocks=[...visible].flatMap(i=>{const c=data.readUInt16LE(i*2),entry=palette[c];if(!entry||entry.id==='minecraft:air')return [];const x=o[0]+i%s[0],z=o[2]+Math.floor(i/s[0])%s[2],y=o[1]+Math.floor(i/(s[0]*s[2]));return [{id:entry.id,x,y,z,distance:Math.hypot(x+.5-p.x,y+.5-p.eyeY,z+.5-p.z)}];});
+  result.environment=describeEnvironment({biome:scan.biome,dimension:scan.dimension,player:p,openSky:scan.openSkyAtPlayer,blocks:seenBlocks});
+  if(!scan.openSkyAtPlayer&&p.y<63&&clearance>=4&&directions.filter(d=>d.widthAt2_6_12[1]>=5).length>=2)result.environment.landmarks.push({id:'open_cavern',label:'地下空间明显变开阔',evidence:[{at:result.origin,source:'local_geometry'}],note:'由可见高度和地面连通宽度测量，不证明具体洞穴类型或安全。'});
   if(detail){
     const included=new Set(visible);
     for(const n of queue)for(const y of [n.y-1,n.y,n.y+1])included.add(index(n.x,y,n.z));

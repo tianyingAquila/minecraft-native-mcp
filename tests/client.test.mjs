@@ -31,6 +31,8 @@ test("容器刚打开暂时为空时，等待真实物品同步后再报告", as
 test("取消发生在上游创建job之前，晚创建job也必须终止", async () => {
   const { JobManager } = await import("../bundled/mcpfabric/dist/agent/jobs.js");
   let release;
+  let entered;
+  const ready=new Promise(r=>{entered=r;});
   const gate = new Promise(r => { release = r; });
   let moves = 0;
   const actions = new ClientActions({bridge: {call: async () => { moves++; return {}; }}});
@@ -40,6 +42,7 @@ test("取消发生在上游创建job之前，晚创建job也必须终止", async
   actions.rt = {jobs};
   actions.catalogue = [{name: "travel_to"}];
   actions.definitions = new Map([["travel_to", {validator: {parse: x => x}, run: async () => {
+    entered();
     await gate;
     jobs.start("travel", "late", async ctx => {
       await ctx.sleep(30);
@@ -48,6 +51,7 @@ test("取消发生在上游创建job之前，晚创建job也必须终止", async
     }, actions.session.id);
   }}]]);
   const pending = actions.execute("travel_to").catch(() => {});
+  await ready;
   const cancelled = actions.cancel();
   await new Promise(r => setTimeout(r, 5));
   release();

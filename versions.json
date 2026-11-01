@@ -46,7 +46,8 @@
         "compiled": true,
         "smoke": true,
         "nativeHud": true,
-        "nativeContainers": true
+        "nativeContainers": true,
+        "navigationDiscovery": true
       }
     },
     {
@@ -91,7 +92,8 @@
         "compiled": true,
         "smoke": true,
         "nativeHud": true,
-        "nativeContainers": false
+        "nativeContainers": false,
+        "navigationDiscovery": false
       }
     },
     {
@@ -136,7 +138,8 @@
         "compiled": true,
         "smoke": true,
         "nativeHud": true,
-        "nativeContainers": false
+        "nativeContainers": false,
+        "navigationDiscovery": false
       }
     },
     {
@@ -181,7 +184,8 @@
         "compiled": true,
         "smoke": true,
         "nativeHud": true,
-        "nativeContainers": false
+        "nativeContainers": false,
+        "navigationDiscovery": false
       }
     },
     {
@@ -226,7 +230,8 @@
         "compiled": true,
         "smoke": true,
         "nativeHud": true,
-        "nativeContainers": true
+        "nativeContainers": true,
+        "navigationDiscovery": true
       }
     },
     {
@@ -271,7 +276,8 @@
         "compiled": true,
         "smoke": true,
         "nativeHud": true,
-        "nativeContainers": false
+        "nativeContainers": false,
+        "navigationDiscovery": false
       }
     },
     {
@@ -316,7 +322,8 @@
         "compiled": true,
         "smoke": true,
         "nativeHud": true,
-        "nativeContainers": false
+        "nativeContainers": false,
+        "navigationDiscovery": false
       }
     },
     {
@@ -361,7 +368,8 @@
         "compiled": true,
         "smoke": true,
         "nativeHud": true,
-        "nativeContainers": false
+        "nativeContainers": false,
+        "navigationDiscovery": false
       }
     },
     {
@@ -406,7 +414,8 @@
         "compiled": true,
         "smoke": true,
         "nativeHud": true,
-        "nativeContainers": false
+        "nativeContainers": false,
+        "navigationDiscovery": false
       }
     },
     {
@@ -452,7 +461,8 @@
         "compiled": true,
         "smoke": true,
         "nativeHud": true,
-        "nativeContainers": false
+        "nativeContainers": false,
+        "navigationDiscovery": false
       }
     },
     {
@@ -498,7 +508,8 @@
         "compiled": true,
         "smoke": true,
         "nativeHud": true,
-        "nativeContainers": false
+        "nativeContainers": false,
+        "navigationDiscovery": false
       }
     },
     {
@@ -544,7 +555,8 @@
         "compiled": true,
         "smoke": true,
         "nativeHud": true,
-        "nativeContainers": true
+        "nativeContainers": true,
+        "navigationDiscovery": true
       }
     }
   ]

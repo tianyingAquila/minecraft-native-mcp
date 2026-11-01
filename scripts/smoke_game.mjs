@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {Runtime} from '../src/runtime.mjs';
 import {ROOT} from '../src/config.mjs';
+import {verifyNavigationAndDiscovery} from './smoke_discovery.mjs';
 const args=process.argv.slice(2),version=args[args.indexOf('--version')+1];
 if(!args.includes('--version')||!/^1\.21(?:\.\d+)?$/.test(version))throw Error('Usage: node scripts/smoke_game.mjs --version 1.21.4 [--minecraft-home path]');
 const jar=args.includes('--minecraft-home')?args[args.indexOf('--minecraft-home')+1]:path.join(os.homedir(),'.gradle/caches/fabric-loom',version,'minecraft-client.jar');
@@ -33,6 +34,7 @@ try{
  const look=await runtime.mcp.execute('look_at',{x:.5,y:200.5,z:2.5});assert.equal(look.state,'succeeded');
  const mined=await runtime.mcp.execute('mine_block',{x:0,y:200,z:2},{remainingMs:()=>30000});assert.equal(mined.state,'succeeded');
  const after=await b.call('fish.probeBlocks',{positions:[{x:0,y:200,z:2}]});assert.doesNotMatch(JSON.stringify(after),/oak_log/);record('real-mine',{state:mined.state});
+ if(args.includes('--discovery'))await verifyNavigationAndDiscovery(runtime,out,record);
  for(const [block,size,role] of [['furnace',3,'output'],['chest',27,'storage'],['crafting_table',10,'crafting_input'],['brewing_stand',5,'ingredient'],['anvil',3,'secondary_input'],['smithing_table',4,'template']]){
   await b.call('container.close');
   const items=block==='furnace'?'{Items:[{Slot:0b,id:"minecraft:raw_iron",count:2},{Slot:1b,id:"minecraft:coal",count:1},{Slot:2b,id:"minecraft:copper_ingot",count:1}]}':'';

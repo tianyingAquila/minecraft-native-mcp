@@ -77,6 +77,10 @@ public final class FishLiveClient implements ClientModInitializer {
             BaritoneAPI.getSettings().allowInventory.value=true;
             BaritoneAPI.getSettings().chatControl.value=false;
             BaritoneAPI.getSettings().echoCommands.value=false;
+            // First-person playback follows the path instead of silent server-side rotations.
+            BaritoneAPI.getSettings().freeLook.value=false;
+            BaritoneAPI.getSettings().remainWithExistingLookDirection.value=false;
+            BaritoneAPI.getSettings().smoothLook.value=true;
             BaritoneAPI.getProvider().getPrimaryBaritone().getCustomGoalProcess().setGoalAndPath(new GoalNear(target,Math.max(0,(int)Math.floor(reach-0.75))));
             JsonObject o=new JsonObject();o.addProperty("started",true);return o;
         }));
@@ -87,6 +91,7 @@ public final class FishLiveClient implements ClientModInitializer {
             boolean planning=exactTarget!=null&&System.currentTimeMillis()-navigationStarted<1500;
             o.addProperty("active",(active||planning)&&!reached);o.addProperty("state",reached?"reached":active?"navigating":planning?"planning":"stopped");
             if(exactTarget!=null)o.addProperty("distance",p.position().distanceTo(exactTarget));
+            o.addProperty("cameraFollowsPath",!BaritoneAPI.getSettings().freeLook.value&&!BaritoneAPI.getSettings().remainWithExistingLookDirection.value);
             return o;
         }));
         router.register("fish.cancel",ctx->ClientMc.call(()->{Gates.playerControl();cancel();JsonObject o=new JsonObject();o.addProperty("stopped",true);return o;}));
