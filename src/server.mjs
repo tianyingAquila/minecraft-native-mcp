@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { ROOT, PORT } from "./config.mjs";
 import { Runtime } from "./runtime.mjs";
+import {runOwned} from './downloads.mjs';
 export const runtime = new Runtime();
 let balanceBubbleSeq = 0;
 const overlayVersion = createHash("sha256")
@@ -52,6 +53,7 @@ const server = http.createServer(async (req, res) => {
       });
     if (url.pathname === "/api/state")
       return json(res, 200, runtime.store.publicState());
+    if (url.pathname === '/api/environment')return json(res,200,await runtime.checkEnvironment());
     if (url.pathname === "/api/overlay") {
       return json(res, 200, {
         ...runtime.store.overlayState(),
@@ -62,6 +64,13 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/control" && req.method === "POST") {
       const value = await body(req);
       switch (value.action) {
+        case 'check_environment':
+          await runtime.checkEnvironment();
+          break;
+        case 'choose_directory': {
+          const folder=(await runOwned('powershell.exe',['-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',path.join(ROOT,'scripts/select_folder.ps1')],{timeoutMs:180000})).trim();
+          return json(res,200,{folder});
+        }
         case "prepare":
           void runtime.prepare().catch(() => {});
           break;

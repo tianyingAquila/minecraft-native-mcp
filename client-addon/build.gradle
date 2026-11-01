@@ -1,15 +1,23 @@
 plugins { id 'net.fabricmc.fabric-loom-remap' version '1.17.11' }
-version='0.1.0'
+def matrix = new groovy.json.JsonSlurper().parse(file('../versions.json'))
+def mc = providers.gradleProperty('fishMinecraft').getOrElse('1.21.4')
+def entry = matrix.versions.find { it.id == mc }
+if (entry == null) throw new GradleException('Unsupported Minecraft ' + mc)
+ext.fishMinecraft = mc
+buildDir = file("build/${mc}")
+version='0.3.0'
 group='dev.fishlive'
-base { archivesName='fish-live-client' }
+base { archivesName="fish-client-${mc}" }
 repositories { mavenCentral() }
 dependencies {
-  minecraft 'com.mojang:minecraft:1.21.4'
+  minecraft "com.mojang:minecraft:${mc}"
   mappings loom.officialMojangMappings()
   modImplementation 'net.fabricmc:fabric-loader:0.20.1'
-  modImplementation 'net.fabricmc.fabric-api:fabric-api:0.119.4+1.21.4'
-  modImplementation files('../data/native-client/mods/mcpfabric-0.8.0+1.21.4.jar')
-  modImplementation files('../data/native-client/mods/baritone-api-fabric-1.13.1.jar')
+  modImplementation "net.fabricmc.fabric-api:fabric-api:${entry.fabricApi.filename.substring(11,entry.fabricApi.filename.length()-4)}"
+  modImplementation files("../outputs/build-deps/${mc}/mcpfabric.jar")
+  modImplementation files("../outputs/build-deps/${mc}/baritone.jar")
 }
+sourceSets.main.java.srcDirs = ["build/${mc}/generated/java"]
+processResources { inputs.property 'minecraft', mc; filesMatching('fabric.mod.json') { expand minecraft: mc } }
 java { toolchain { languageVersion=JavaLanguageVersion.of(21) } }
 tasks.withType(JavaCompile).configureEach { options.release=21; options.encoding='UTF-8' }

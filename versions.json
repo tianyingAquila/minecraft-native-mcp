@@ -1,0 +1,539 @@
+{
+  "schema": 1,
+  "loader": "0.20.1",
+  "mcpVersion": "0.8.0",
+  "mcpRevision": "75c9cb2eb4ff7865b4a9afe8930269ba67280c66",
+  "versions": [
+    {
+      "id": "1.21",
+      "java": 21,
+      "dataPackVersion": {
+        "major": 48
+      },
+      "metadata": {
+        "url": "https://piston-meta.mojang.com/v1/packages/acd88573dd8296a1a93f4e6e52d09641b4dda389/1.21.json",
+        "sha1": "acd88573dd8296a1a93f4e6e52d09641b4dda389"
+      },
+      "client": {
+        "sha1": "0e9a07b9bb3390602f977073aa12884a4ce12431",
+        "size": 26836080,
+        "url": "https://piston-data.mojang.com/v1/objects/0e9a07b9bb3390602f977073aa12884a4ce12431/client.jar"
+      },
+      "server": {
+        "sha1": "450698d1863ab5180c25d7c804ef0fe6369dd1ba",
+        "size": 51623779,
+        "url": "https://piston-data.mojang.com/v1/objects/450698d1863ab5180c25d7c804ef0fe6369dd1ba/server.jar"
+      },
+      "fabricApi": {
+        "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/oGwyXeEI/fabric-api-0.102.0%2B1.21.jar",
+        "filename": "fabric-api-0.102.0+1.21.jar",
+        "algorithm": "sha512",
+        "hash": "11732c4e36c3909360a24aa42a44da89048706cf10aaafa0404d7153cbc7395ff68a130f7b497828d6932740e004416b692650c3fbcc1f32babd7cb6eb9791d8"
+      },
+      "mcp": {
+        "url": "https://github.com/denfry/mcpfabric/releases/download/v0.8.0/mcpfabric-0.8.0%2B1.21.1.jar",
+        "filename": "mcpfabric-0.8.0+1.21.1.jar",
+        "algorithm": "sha256",
+        "hash": "be641f78d8ae20313ffdd11bbe66d8f792c61e7da24086a4bbb55e59497350c4"
+      },
+      "baritone": {
+        "url": "https://github.com/cabaletta/baritone/releases/download/v1.11.3/baritone-api-fabric-1.11.3.jar",
+        "filename": "baritone-api-fabric-1.11.3.jar",
+        "algorithm": "sha256",
+        "hash": "f9a9b17a41d7d7ad22c759058b14fd01e3319663282e66f99e18153237fa6767"
+      },
+      "validation": {
+        "compiled": true,
+        "smoke": true,
+        "nativeHud": false
+      }
+    },
+    {
+      "id": "1.21.1",
+      "java": 21,
+      "dataPackVersion": {
+        "major": 48
+      },
+      "metadata": {
+        "url": "https://piston-meta.mojang.com/v1/packages/018296bcb207bea6fd25b05f08eee3942dcec406/1.21.1.json",
+        "sha1": "018296bcb207bea6fd25b05f08eee3942dcec406"
+      },
+      "client": {
+        "sha1": "30c73b1c5da787909b2f73340419fdf13b9def88",
+        "size": 26836906,
+        "url": "https://piston-data.mojang.com/v1/objects/30c73b1c5da787909b2f73340419fdf13b9def88/client.jar"
+      },
+      "server": {
+        "sha1": "59353fb40c36d304f2035d51e7d6e6baa98dc05c",
+        "size": 51627615,
+        "url": "https://piston-data.mojang.com/v1/objects/59353fb40c36d304f2035d51e7d6e6baa98dc05c/server.jar"
+      },
+      "fabricApi": {
+        "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/Mys3P7lK/fabric-api-0.116.17%2B1.21.1.jar",
+        "filename": "fabric-api-0.116.17+1.21.1.jar",
+        "algorithm": "sha512",
+        "hash": "98c478217da19181f0e4df3ea6c2da6bdbda271c7544a4aea048513a49b444f1ff5b71dc0df6303017c48e8ff69b7bb6af6179bdf0d0e09ab3c1ee08411857a8"
+      },
+      "mcp": {
+        "url": "https://github.com/denfry/mcpfabric/releases/download/v0.8.0/mcpfabric-0.8.0%2B1.21.1.jar",
+        "filename": "mcpfabric-0.8.0+1.21.1.jar",
+        "algorithm": "sha256",
+        "hash": "be641f78d8ae20313ffdd11bbe66d8f792c61e7da24086a4bbb55e59497350c4"
+      },
+      "baritone": {
+        "url": "https://github.com/cabaletta/baritone/releases/download/v1.11.3/baritone-api-fabric-1.11.3.jar",
+        "filename": "baritone-api-fabric-1.11.3.jar",
+        "algorithm": "sha256",
+        "hash": "f9a9b17a41d7d7ad22c759058b14fd01e3319663282e66f99e18153237fa6767"
+      },
+      "validation": {
+        "compiled": true,
+        "smoke": true,
+        "nativeHud": false
+      }
+    },
+    {
+      "id": "1.21.2",
+      "java": 21,
+      "dataPackVersion": {
+        "major": 57
+      },
+      "metadata": {
+        "url": "https://piston-meta.mojang.com/v1/packages/f9a39216a6eec3741172571236a5614fdf9aa01b/1.21.2.json",
+        "sha1": "f9a39216a6eec3741172571236a5614fdf9aa01b"
+      },
+      "client": {
+        "sha1": "c7ac2d0d86f4ca416cab9064ff8a281852ad0c7b",
+        "size": 27842947,
+        "url": "https://piston-data.mojang.com/v1/objects/c7ac2d0d86f4ca416cab9064ff8a281852ad0c7b/client.jar"
+      },
+      "server": {
+        "sha1": "7bf95409b0d9b5388bfea3704ec92012d273c14c",
+        "size": 56120171,
+        "url": "https://piston-data.mojang.com/v1/objects/7bf95409b0d9b5388bfea3704ec92012d273c14c/server.jar"
+      },
+      "fabricApi": {
+        "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/UEjZZNue/fabric-api-0.106.1%2B1.21.2.jar",
+        "filename": "fabric-api-0.106.1+1.21.2.jar",
+        "algorithm": "sha512",
+        "hash": "3c9f04933a71aac76bee6a71d3b48325b65896cb2935ed2c6476d0290d4810648b00e0cea856de0b08ab0086f442eb252c7e816381a0198f7a4b54a5472270bf"
+      },
+      "mcp": {
+        "url": "https://github.com/denfry/mcpfabric/releases/download/v0.8.0/mcpfabric-0.8.0%2B1.21.2.jar",
+        "filename": "mcpfabric-0.8.0+1.21.2.jar",
+        "algorithm": "sha256",
+        "hash": "e9a1ce779e30ece87038d7440cc8b25757bf3971be8cddc0c38f01c79d2427ed"
+      },
+      "baritone": {
+        "url": "https://github.com/cabaletta/baritone/releases/download/v1.12.0/baritone-api-fabric-1.12.0.jar",
+        "filename": "baritone-api-fabric-1.12.0.jar",
+        "algorithm": "sha256",
+        "hash": "b3b36aa3d74c4df053d147ee9254b70c15f4d1e5e11a2766141a146eea3bd60b"
+      },
+      "validation": {
+        "compiled": true,
+        "smoke": true,
+        "nativeHud": false
+      }
+    },
+    {
+      "id": "1.21.3",
+      "java": 21,
+      "dataPackVersion": {
+        "major": 57
+      },
+      "metadata": {
+        "url": "https://piston-meta.mojang.com/v1/packages/653a8814e935d97ffa7478d6b94a504d96f4584b/1.21.3.json",
+        "sha1": "653a8814e935d97ffa7478d6b94a504d96f4584b"
+      },
+      "client": {
+        "sha1": "6f67d19b4467240639cb2c368ffd4b94ba889705",
+        "size": 27844259,
+        "url": "https://piston-data.mojang.com/v1/objects/6f67d19b4467240639cb2c368ffd4b94ba889705/client.jar"
+      },
+      "server": {
+        "sha1": "45810d238246d90e811d896f87b14695b7fb6839",
+        "size": 56122038,
+        "url": "https://piston-data.mojang.com/v1/objects/45810d238246d90e811d896f87b14695b7fb6839/server.jar"
+      },
+      "fabricApi": {
+        "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/wLq4rGsB/fabric-api-0.114.1%2B1.21.3.jar",
+        "filename": "fabric-api-0.114.1+1.21.3.jar",
+        "algorithm": "sha512",
+        "hash": "962e64e8418b074ce68809cd38835e99fea3da8dc1b2979a69f10fee047cd3404b2157a8106fa650795d17e0eebfa41a0d21af7ea5a4b9ee3992c57bc3c5d113"
+      },
+      "mcp": {
+        "url": "https://github.com/denfry/mcpfabric/releases/download/v0.8.0/mcpfabric-0.8.0%2B1.21.3.jar",
+        "filename": "mcpfabric-0.8.0+1.21.3.jar",
+        "algorithm": "sha256",
+        "hash": "7ac2953154526e0fee346fc721b62c4624a7afc06255d259c84451ed313ddb1f"
+      },
+      "baritone": {
+        "url": "https://github.com/cabaletta/baritone/releases/download/v1.12.0/baritone-api-fabric-1.12.0.jar",
+        "filename": "baritone-api-fabric-1.12.0.jar",
+        "algorithm": "sha256",
+        "hash": "b3b36aa3d74c4df053d147ee9254b70c15f4d1e5e11a2766141a146eea3bd60b"
+      },
+      "validation": {
+        "compiled": true,
+        "smoke": true,
+        "nativeHud": false
+      }
+    },
+    {
+      "id": "1.21.4",
+      "java": 21,
+      "dataPackVersion": {
+        "major": 61
+      },
+      "metadata": {
+        "url": "https://piston-meta.mojang.com/v1/packages/64843a304d7747da779448f853323962233f39ff/1.21.4.json",
+        "sha1": "64843a304d7747da779448f853323962233f39ff"
+      },
+      "client": {
+        "sha1": "a7e5a6024bfd3cd614625aa05629adf760020304",
+        "size": 28335587,
+        "url": "https://piston-data.mojang.com/v1/objects/a7e5a6024bfd3cd614625aa05629adf760020304/client.jar"
+      },
+      "server": {
+        "sha1": "4707d00eb834b446575d89a61a11b5d548d8c001",
+        "size": 56880250,
+        "url": "https://piston-data.mojang.com/v1/objects/4707d00eb834b446575d89a61a11b5d548d8c001/server.jar"
+      },
+      "fabricApi": {
+        "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/p96k10UR/fabric-api-0.119.4%2B1.21.4.jar",
+        "filename": "fabric-api-0.119.4+1.21.4.jar",
+        "algorithm": "sha512",
+        "hash": "16b679f6a42549ca3b6bc147de710b2c8ba2d5e4661ed88df22782c05a4a5f6c1163d7b13867687ed91acde0fdfe5a5037d05662431c946865b58396284e7ee7"
+      },
+      "mcp": {
+        "url": "https://github.com/denfry/mcpfabric/releases/download/v0.8.0/mcpfabric-0.8.0%2B1.21.4.jar",
+        "filename": "mcpfabric-0.8.0+1.21.4.jar",
+        "algorithm": "sha256",
+        "hash": "c93fb180c79d99b395a6ad41c9688717d5ca9fe28749541ea71d5b15bb5ac3b7"
+      },
+      "baritone": {
+        "url": "https://github.com/cabaletta/baritone/releases/download/v1.13.1/baritone-api-fabric-1.13.1.jar",
+        "filename": "baritone-api-fabric-1.13.1.jar",
+        "algorithm": "sha256",
+        "hash": "bfb79c3cdb8fe1f7697999b1f9c7f08ea29775f3b69d48ad90c387690ee67b05"
+      },
+      "validation": {
+        "compiled": true,
+        "smoke": true,
+        "nativeHud": false
+      }
+    },
+    {
+      "id": "1.21.5",
+      "java": 21,
+      "dataPackVersion": {
+        "major": 71
+      },
+      "metadata": {
+        "url": "https://piston-meta.mojang.com/v1/packages/cd7d9c7e497cc3b036ec6aa6e6baba94a4a790df/1.21.5.json",
+        "sha1": "cd7d9c7e497cc3b036ec6aa6e6baba94a4a790df"
+      },
+      "client": {
+        "sha1": "b88808bbb3da8d9f453694b5d8f74a3396f1a533",
+        "size": 28984409,
+        "url": "https://piston-data.mojang.com/v1/objects/b88808bbb3da8d9f453694b5d8f74a3396f1a533/client.jar"
+      },
+      "server": {
+        "sha1": "e6ec2f64e6080b9b5d9b471b291c33cc7f509733",
+        "size": 57269758,
+        "url": "https://piston-data.mojang.com/v1/objects/e6ec2f64e6080b9b5d9b471b291c33cc7f509733/server.jar"
+      },
+      "fabricApi": {
+        "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/kKEGlsne/fabric-api-0.128.2%2B1.21.5.jar",
+        "filename": "fabric-api-0.128.2+1.21.5.jar",
+        "algorithm": "sha512",
+        "hash": "0e42b72d1a63a45c1b64cdabafd15f4d236bbda5521964d687afa1f833d4022f96c7ffab5dd4471aba0190be588f092d156bf14a50b794895fb3286ec899bcf7"
+      },
+      "mcp": {
+        "url": "https://github.com/denfry/mcpfabric/releases/download/v0.8.0/mcpfabric-0.8.0%2B1.21.5.jar",
+        "filename": "mcpfabric-0.8.0+1.21.5.jar",
+        "algorithm": "sha256",
+        "hash": "03c5acaef06d29e627c4a70ad169cfd32452da24ebe300b646bf96c936c7e17d"
+      },
+      "baritone": {
+        "url": "https://github.com/cabaletta/baritone/releases/download/v1.14.0/baritone-api-fabric-1.14.0.jar",
+        "filename": "baritone-api-fabric-1.14.0.jar",
+        "algorithm": "sha256",
+        "hash": "e7c84733fa7c86d15743866cdd46e46eb27ce8285b1a21fbc95113c6a4d0b9d8"
+      },
+      "validation": {
+        "compiled": true,
+        "smoke": true,
+        "nativeHud": false
+      }
+    },
+    {
+      "id": "1.21.6",
+      "java": 21,
+      "dataPackVersion": {
+        "major": 80
+      },
+      "metadata": {
+        "url": "https://piston-meta.mojang.com/v1/packages/1a133f00ee1e853d331618a95f355d8b2bd8e2ce/1.21.6.json",
+        "sha1": "1a133f00ee1e853d331618a95f355d8b2bd8e2ce"
+      },
+      "client": {
+        "sha1": "740a125b83dd3447feaa3c5e891ead7fbb21ae28",
+        "size": 29516555,
+        "url": "https://piston-data.mojang.com/v1/objects/740a125b83dd3447feaa3c5e891ead7fbb21ae28/client.jar"
+      },
+      "server": {
+        "sha1": "6e64dcabba3c01a7271b4fa6bd898483b794c59b",
+        "size": 57554576,
+        "url": "https://piston-data.mojang.com/v1/objects/6e64dcabba3c01a7271b4fa6bd898483b794c59b/server.jar"
+      },
+      "fabricApi": {
+        "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/F5TVHWcE/fabric-api-0.128.2%2B1.21.6.jar",
+        "filename": "fabric-api-0.128.2+1.21.6.jar",
+        "algorithm": "sha512",
+        "hash": "b6d0ec0aec40069cb1fa2159c126d027d7f95e3f6260a3e88ebe9c47f3cb716d1170af8e2e4ff3d4108ce5eeaea70002a889547578374d4d6dfa45755e99431e"
+      },
+      "mcp": {
+        "url": "https://github.com/denfry/mcpfabric/releases/download/v0.8.0/mcpfabric-0.8.0%2B1.21.6.jar",
+        "filename": "mcpfabric-0.8.0+1.21.6.jar",
+        "algorithm": "sha256",
+        "hash": "86b5f68c6bf6dfdb227d5a86dc33cbed92e2a643b8d277ccf384219622f943fc"
+      },
+      "baritone": {
+        "url": "https://github.com/cabaletta/baritone/releases/download/v1.15.0/baritone-api-fabric-1.15.0.jar",
+        "filename": "baritone-api-fabric-1.15.0.jar",
+        "algorithm": "sha256",
+        "hash": "c58ef35a133b6ffce96a74682138ac2ee818cbc063b7c62671db9f9d7d783ebb"
+      },
+      "validation": {
+        "compiled": true,
+        "smoke": true,
+        "nativeHud": false
+      }
+    },
+    {
+      "id": "1.21.7",
+      "java": 21,
+      "dataPackVersion": {
+        "major": 81
+      },
+      "metadata": {
+        "url": "https://piston-meta.mojang.com/v1/packages/08a32684a4ae5f090525b7b29c59a8cc6e983277/1.21.7.json",
+        "sha1": "08a32684a4ae5f090525b7b29c59a8cc6e983277"
+      },
+      "client": {
+        "sha1": "a2db1ea98c37b2d00c83f6867fb8bb581a593e07",
+        "size": 29522178,
+        "url": "https://piston-data.mojang.com/v1/objects/a2db1ea98c37b2d00c83f6867fb8bb581a593e07/client.jar"
+      },
+      "server": {
+        "sha1": "05e4b48fbc01f0385adb74bcff9751d34552486c",
+        "size": 57556704,
+        "url": "https://piston-data.mojang.com/v1/objects/05e4b48fbc01f0385adb74bcff9751d34552486c/server.jar"
+      },
+      "fabricApi": {
+        "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/JntuF9Ul/fabric-api-0.129.0%2B1.21.7.jar",
+        "filename": "fabric-api-0.129.0+1.21.7.jar",
+        "algorithm": "sha512",
+        "hash": "43bf6af145a6b450503a6d7e7ec9a34912bd1494969b5d8861067f0f846cf710805415fb0fbc93c9ae9f5164d45c7649342f84b4f34552b2abdd892fd3b9838e"
+      },
+      "mcp": {
+        "url": "https://github.com/denfry/mcpfabric/releases/download/v0.8.0/mcpfabric-0.8.0%2B1.21.7.jar",
+        "filename": "mcpfabric-0.8.0+1.21.7.jar",
+        "algorithm": "sha256",
+        "hash": "5d519c7b454feab0430b1a1883751395d4eb8f72300f8d1286101c2c9d3afd0a"
+      },
+      "baritone": {
+        "url": "https://github.com/cabaletta/baritone/releases/download/v1.15.0/baritone-api-fabric-1.15.0.jar",
+        "filename": "baritone-api-fabric-1.15.0.jar",
+        "algorithm": "sha256",
+        "hash": "c58ef35a133b6ffce96a74682138ac2ee818cbc063b7c62671db9f9d7d783ebb"
+      },
+      "validation": {
+        "compiled": true,
+        "smoke": true,
+        "nativeHud": false
+      }
+    },
+    {
+      "id": "1.21.8",
+      "java": 21,
+      "dataPackVersion": {
+        "major": 81
+      },
+      "metadata": {
+        "url": "https://piston-meta.mojang.com/v1/packages/b46418622ad2702cc0f021f777f8eea46ad4107d/1.21.8.json",
+        "sha1": "b46418622ad2702cc0f021f777f8eea46ad4107d"
+      },
+      "client": {
+        "sha1": "a19d9badbea944a4369fd0059e53bf7286597576",
+        "size": 29525242,
+        "url": "https://piston-data.mojang.com/v1/objects/a19d9badbea944a4369fd0059e53bf7286597576/client.jar"
+      },
+      "server": {
+        "sha1": "6bce4ef400e4efaa63a13d5e6f6b500be969ef81",
+        "size": 57555044,
+        "url": "https://piston-data.mojang.com/v1/objects/6bce4ef400e4efaa63a13d5e6f6b500be969ef81/server.jar"
+      },
+      "fabricApi": {
+        "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/g58ofrov/fabric-api-0.136.1%2B1.21.8.jar",
+        "filename": "fabric-api-0.136.1+1.21.8.jar",
+        "algorithm": "sha512",
+        "hash": "eb1a6b5fc9912c68409493f10f43c3b61adda1d789ede9c83b16d0a95a2eb96bd630472866e163960479eb1b4d1196d09ade5aadc9da62624e800640c706c4a9"
+      },
+      "mcp": {
+        "url": "https://github.com/denfry/mcpfabric/releases/download/v0.8.0/mcpfabric-0.8.0%2B1.21.8.jar",
+        "filename": "mcpfabric-0.8.0+1.21.8.jar",
+        "algorithm": "sha256",
+        "hash": "d94b82d10f8b9cbb71b7fbe14a732e8d5acac319031093ab1f1c85a9a7908420"
+      },
+      "baritone": {
+        "url": "https://github.com/cabaletta/baritone/releases/download/v1.15.0/baritone-api-fabric-1.15.0.jar",
+        "filename": "baritone-api-fabric-1.15.0.jar",
+        "algorithm": "sha256",
+        "hash": "c58ef35a133b6ffce96a74682138ac2ee818cbc063b7c62671db9f9d7d783ebb"
+      },
+      "validation": {
+        "compiled": true,
+        "smoke": true,
+        "nativeHud": true
+      }
+    },
+    {
+      "id": "1.21.9",
+      "java": 21,
+      "dataPackVersion": {
+        "major": 88,
+        "minor": 0
+      },
+      "metadata": {
+        "url": "https://piston-meta.mojang.com/v1/packages/fdef6a1232ea4c98eba1e87194ed2f0be632aab7/1.21.9.json",
+        "sha1": "fdef6a1232ea4c98eba1e87194ed2f0be632aab7"
+      },
+      "client": {
+        "sha1": "ce92fd8d1b2460c41ceda07ae7b3fe863a80d045",
+        "size": 30591861,
+        "url": "https://piston-data.mojang.com/v1/objects/ce92fd8d1b2460c41ceda07ae7b3fe863a80d045/client.jar"
+      },
+      "server": {
+        "sha1": "11e54c2081420a4d49db3007e66c80a22579ff2a",
+        "size": 58638725,
+        "url": "https://piston-data.mojang.com/v1/objects/11e54c2081420a4d49db3007e66c80a22579ff2a/server.jar"
+      },
+      "fabricApi": {
+        "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/vczmWJBj/fabric-api-0.134.1%2B1.21.9.jar",
+        "filename": "fabric-api-0.134.1+1.21.9.jar",
+        "algorithm": "sha512",
+        "hash": "e9e23dfc1bbe27891be06bfb07f1ff0121a0e5e46bbf73910999b119d7eb15ee15be7f5feb926873c38e7a505a7a2cd6f343db672ec5d0e371b26ffe3591dd84"
+      },
+      "mcp": {
+        "url": "https://github.com/denfry/mcpfabric/releases/download/v0.8.0/mcpfabric-0.8.0%2B1.21.9.jar",
+        "filename": "mcpfabric-0.8.0+1.21.9.jar",
+        "algorithm": "sha256",
+        "hash": "fe4d4e310184b615c73d0003920523f25aa02a06a63ce232c2fd262f8516b6e8"
+      },
+      "baritone": {
+        "url": "https://github.com/cabaletta/baritone/releases/download/v1.16.0/baritone-api-fabric-1.16.0.jar",
+        "filename": "baritone-api-fabric-1.16.0.jar",
+        "algorithm": "sha256",
+        "hash": "7a8c2d08fb6e66b2bc32dd6d78570c798186eed114e6e88f692af4e3742a2b46"
+      },
+      "validation": {
+        "compiled": true,
+        "smoke": false,
+        "nativeHud": false
+      }
+    },
+    {
+      "id": "1.21.10",
+      "java": 21,
+      "dataPackVersion": {
+        "major": 88,
+        "minor": 0
+      },
+      "metadata": {
+        "url": "https://piston-meta.mojang.com/v1/packages/56eee5164e2944be2b6c879e2eabdd2e28d0cc90/1.21.10.json",
+        "sha1": "56eee5164e2944be2b6c879e2eabdd2e28d0cc90"
+      },
+      "client": {
+        "sha1": "d3bdf582a7fa723ce199f3665588dcfe6bf9aca8",
+        "size": 30592168,
+        "url": "https://piston-data.mojang.com/v1/objects/d3bdf582a7fa723ce199f3665588dcfe6bf9aca8/client.jar"
+      },
+      "server": {
+        "sha1": "95495a7f485eedd84ce928cef5e223b757d2f764",
+        "size": 58642415,
+        "url": "https://piston-data.mojang.com/v1/objects/95495a7f485eedd84ce928cef5e223b757d2f764/server.jar"
+      },
+      "fabricApi": {
+        "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/tV4Gc0Zo/fabric-api-0.138.4%2B1.21.10.jar",
+        "filename": "fabric-api-0.138.4+1.21.10.jar",
+        "algorithm": "sha512",
+        "hash": "5e64c53391dfd1c059777d671c52be17a4e27a29d9bd7340ea9e3f55ce7a770b38db0a15e0966e981ee8c1b9372fb89543a278521624689268acebb85bd5c6e9"
+      },
+      "mcp": {
+        "url": "https://github.com/denfry/mcpfabric/releases/download/v0.8.0/mcpfabric-0.8.0%2B1.21.10.jar",
+        "filename": "mcpfabric-0.8.0+1.21.10.jar",
+        "algorithm": "sha256",
+        "hash": "e87252ad89385ccd8cd5fc229d020a5d6ea41985b257316a43eae2c9e7919f9e"
+      },
+      "baritone": {
+        "url": "https://github.com/cabaletta/baritone/releases/download/v1.16.0/baritone-api-fabric-1.16.0.jar",
+        "filename": "baritone-api-fabric-1.16.0.jar",
+        "algorithm": "sha256",
+        "hash": "7a8c2d08fb6e66b2bc32dd6d78570c798186eed114e6e88f692af4e3742a2b46"
+      },
+      "validation": {
+        "compiled": true,
+        "smoke": false,
+        "nativeHud": false
+      }
+    },
+    {
+      "id": "1.21.11",
+      "java": 21,
+      "dataPackVersion": {
+        "major": 94,
+        "minor": 1
+      },
+      "metadata": {
+        "url": "https://piston-meta.mojang.com/v1/packages/96403ac4a56447675325d2b1b5e320d76a5b5625/1.21.11.json",
+        "sha1": "96403ac4a56447675325d2b1b5e320d76a5b5625"
+      },
+      "client": {
+        "sha1": "ba2df812c2d12e0219c489c4cd9a5e1f0760f5bd",
+        "size": 31152600,
+        "url": "https://piston-data.mojang.com/v1/objects/ba2df812c2d12e0219c489c4cd9a5e1f0760f5bd/client.jar"
+      },
+      "server": {
+        "sha1": "64bb6d763bed0a9f1d632ec347938594144943ed",
+        "size": 56327581,
+        "url": "https://piston-data.mojang.com/v1/objects/64bb6d763bed0a9f1d632ec347938594144943ed/server.jar"
+      },
+      "fabricApi": {
+        "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/6qAuTtLR/fabric-api-0.141.6%2B1.21.11.jar",
+        "filename": "fabric-api-0.141.6+1.21.11.jar",
+        "algorithm": "sha512",
+        "hash": "852d3682c4f353fd0ca86546af8578513e8bcf628377fa9d49c556bc59c5024c69ab56c92fc6dfba11fed19e4316a3f5636e7e07fd3d96f7043b531aef59b637"
+      },
+      "mcp": {
+        "url": "https://github.com/denfry/mcpfabric/releases/download/v0.8.0/mcpfabric-0.8.0%2B1.21.11.jar",
+        "filename": "mcpfabric-0.8.0+1.21.11.jar",
+        "algorithm": "sha256",
+        "hash": "6513814cfa813a023be6b56f7fcb0ee902cc87ea83933147967599ee8d1b146b"
+      },
+      "baritone": {
+        "url": "https://github.com/cabaletta/baritone/releases/download/v1.17.0/baritone-api-fabric-1.17.0.jar",
+        "filename": "baritone-api-fabric-1.17.0.jar",
+        "algorithm": "sha256",
+        "hash": "a1646893c2a6338ea6bf1a3bdecf2cd743ede61e31a4324bd79a82f3d03360f9"
+      },
+      "validation": {
+        "compiled": true,
+        "smoke": false,
+        "nativeHud": false
+      }
+    }
+  ]
+}

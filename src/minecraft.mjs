@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { ROOT, DATA } from "./config.mjs";
+import {readPrepared,gameWorldName,versionEntry} from './versions.mjs';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function stopChildTree(child) {
   if (!child || child.exitCode !== null) return;
@@ -21,6 +22,7 @@ export async function stopChildTree(child) {
   if (child.exitCode === null) child.kill("SIGKILL");
 }
 export function createWorldFiles(worldDir, settings) {
+  const modernRules=(settings.resolvedVersion||'1.21.4')==='1.21.11';
   fs.mkdirSync(worldDir, { recursive: true });
   fs.writeFileSync(path.join(worldDir, "eula.txt"), "eula=true\n");
   fs.writeFileSync(
@@ -54,7 +56,8 @@ export function createWorldFiles(worldDir, settings) {
     "pack.mcmeta",
     JSON.stringify({
       pack: {
-        pack_format: 61,
+        pack_format: versionEntry(settings.resolvedVersion||'1.21.4').dataPackVersion?.major||61,
+        ...(versionEntry(settings.resolvedVersion||'1.21.4').dataPackVersion?.minor!==undefined?{min_format:[versionEntry(settings.resolvedVersion||'1.21.4').dataPackVersion.major,versionEntry(settings.resolvedVersion||'1.21.4').dataPackVersion.minor],max_format:[versionEntry(settings.resolvedVersion||'1.21.4').dataPackVersion.major,versionEntry(settings.resolvedVersion||'1.21.4').dataPackVersion.minor]}:{}),
         description:
           "DeepSeekFish: regeneration I, resistance I, night vision I, keepInventory",
       },
@@ -70,7 +73,7 @@ export function createWorldFiles(worldDir, settings) {
   );
   write(
     "data/fish/function/load.mcfunction",
-    "gamerule keepInventory true\nscoreboard objectives add fish_clock dummy\nscoreboard players set #clock fish_clock 0\n",
+    'gamerule '+(modernRules?'minecraft:keep_inventory':'keepInventory')+" true\nscoreboard objectives add fish_clock dummy\nscoreboard players set #clock fish_clock 0\n",
   );
   write(
     "data/fish/function/tick.mcfunction",
@@ -97,19 +100,21 @@ export class Minecraft {
       throw new Error("Minecraft 服务端尚未运行。");
     this.child.stdin.write(text + "\n");
   }
-  async start() {
+  async start({signal}={}) {
+    signal?.throwIfAborted();
     if (this.child?.exitCode === null) {
       if (this.world !== this.store.settings.world)
         throw new Error("请先保存停止，再切换世界。");
       return;
     }
-    const jar = path.join(ROOT, "runtime", "server-1.21.4.jar");
+    const prepared=readPrepared();
+    const jar = prepared?.serverJar||path.join(ROOT, "runtime", "server-1.21.4.jar");
     if (!fs.existsSync(jar))
       throw new Error("缺少 Minecraft 服务端，请先运行准备环境。");
     this.world = this.store.settings.world;
-    const cwd = path.join(DATA, "worlds", this.world);
+    const cwd = path.join(DATA, "worlds", gameWorldName(this.store.settings));
     createWorldFiles(cwd, this.store.settings);
-    const nativeProfile = path.join(ROOT, "runtime/native-server/launch.json");
+    const nativeProfile = prepared?.serverProfile||path.join(ROOT, "runtime/native-server/launch.json");
     let javaArgs = [
       "-Xms512M",
       "-Xmx2G",
@@ -119,7 +124,7 @@ export class Minecraft {
       "nogui",
     ];
     if (process.env.FISH_GAME_BACKEND !== "legacy") {
-      const pauseMod = path.join(
+      const pauseMod = prepared?.pauseMod||path.join(
         ROOT,
         "runtime/native-server/fish-pause-server.jar",
       );
@@ -142,6 +147,7 @@ export class Minecraft {
     this.child = child;
     let pending = "";
     const ready = new Promise((resolve, reject) => {
+      const abort=()=>{void stopChildTree(child);reject(signal.reason);};signal?.addEventListener('abort',abort,{once:true});
       const timeout = setTimeout(
         () => reject(new Error("Minecraft 启动超时，请查看运行日志。")),
         120000,
@@ -157,6 +163,7 @@ export class Minecraft {
           this.lines = this.lines.slice(-120);
           if (line.includes("Done (")) {
             clearTimeout(timeout);
+            signal?.removeEventListener('abort',abort);
             resolve();
           }
           if (
@@ -176,6 +183,7 @@ export class Minecraft {
         reject(new Error("Java 启动失败，请检查 Java 21。"));
       });
       child.once("exit", (code) => {
+        signal?.removeEventListener('abort',abort);
         clearTimeout(timeout);
         log.end();
         reject(new Error("Minecraft 服务端退出，代码 " + code));
@@ -183,9 +191,10 @@ export class Minecraft {
     });
     try {
       await ready;
-      this.command("gamerule keepInventory true");
-      this.command("gamerule sendCommandFeedback false");
-      this.command("gamerule logAdminCommands false");
+      const modern=this.store.settings.resolvedVersion==='1.21.11';
+      this.command('gamerule '+(modern?'minecraft:keep_inventory':'keepInventory')+' true');
+      this.command('gamerule '+(modern?'minecraft:send_command_feedback':'sendCommandFeedback')+' false');
+      this.command('gamerule '+(modern?'minecraft:log_admin_commands':'logAdminCommands')+' false');
       this.store.event("Minecraft " + this.world + " 世界已准备。");
     } catch (e) {
       await stopChildTree(child);

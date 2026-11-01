@@ -1,22 +1,48 @@
-# 架构与扩展
+# 架构与开发
 
-`MCP client → src/mcp-server.mjs → ClientActions → authenticated local RPC → Fabric player`
+通用MCP路径：`MCP客户端 → src/mcp-server.mjs → ClientActions → 本机认证RPC → Fabric真实玩家`。标准MCP不要求DeepSeek或直播平台。
 
-核心入口通过标准 stdio 暴露工具；无需 DeepSeek 或直播平台。客户端代理的寻路、配方、长期地点记忆复用固定版本 mcpfabric；新增的连续矿道、原生交互确认和空间感知在本项目工具层及 client-addon 中。
+DSH基础入口在`dsh`，通过宿主webServer挂载模式栏按钮和启动路由，打开浏览器控制台。插件安装器已安装的SDK/yaml/zod在工作区通过目录链接复用，首次启动创建日志目录；失效链接或不完整依赖可修复。默认托管工作区升级先备份源码，保留data/runtime；外部指定项目不自动覆盖。退出只清理拥有的进程。
 
-DSH基础插件位于 `dsh/index.mjs` 和 `dsh/manager.mjs`。Cordis bundle 在模式选择器右侧注入入口，使用宿主已有 webServer。启用时补齐基础依赖，点击后打开自主控制台；`src/environment.mjs` 在“准备游戏”时核对已有游戏并调用安装脚本，实际连接冻结后才进入 ready。默认托管副本升级先备份源码，保留 data/runtime/vendor；外部指定项目不自动改写。退出插件清理拥有的任务与控制台，不接管外部进程生命周期。
+## 环境准备
 
-`packages/dsh-minecraft-stream` 是单独发布的可选扩展，只调用基础版的直播模式开关。普通模式不绘制挂件，直播模式才加载浏览器预览并启用游戏内 HUD。两者共用同一个控制台与游戏，不新增常驻中转服务。
+- `versions.json`固定12个游戏版本的官方客户端/服务端元数据及模组校验值。
+- `src/versions.mjs`检查默认或指定目录内原版JAR的SHA1，识别第三方启动器版本文件夹；不同版本分开世界、数据库和模型记忆，保留旧1.21.4位置。
+- `src/game-setup.mjs`负责检查、便携Java21、运行库与资源、预构建模组及版本启动配置。最终用户无需Git、Python、JDK或Gradle。
+- `src/downloads.mjs`流式下载、校验、重试、取消和有界子进程。资源别名按目标路径去重，避免并发争用临时文件。
+- `src/setup-state.mjs`记录实际阶段/进度/可恢复错误；控制台使用同一状态展示。Java、游戏、网络、占用端口、连接等失败有具体提示。
+- `src/runtime.mjs`在真实玩家连接、状态读取和保存冻结后才进入ready；准备可取消，窗口关闭会使ready失效。
 
-- `src/client-actions.mjs`：工具目录、参数、任务互斥和取消。
-- `src/spatial.mjs` / `FishSpatialScan.java`：局部体素采样、射线可见面、保守地面连通、方向摘要和切片。
-- `src/tunnel.mjs` / `mining.mjs`：有限段落的实际挖掘、前进和中断。
-- `src/runtime.mjs` / `server-addon`：独立世界、客户端及保存冻结。
-- `src/agent.mjs` / `deepseek.mjs`：可选 DeepSeek 决策循环、余额保护与请求用量，不属于 MCP 客户端必需功能。
-- `web` / `FishHud.java`：可选控制台及游戏内挂件。
+运行组件写在工作区；不改系统PATH、证书校验、代理、安全设置、自启或系统服务。游戏资源从官方源获取，客户端本体由使用者已有安装提供。下载只复用通过校验的完整文件。
 
-其他平台可捕获同一 Minecraft 画面，也可读取 `/api/overlay` 构建显示；平台接收、推流和聊天逻辑应单独实现。当前没有生效的弹幕接收或操控集成，不将历史试验作为可用功能。
+## 游戏与显示
 
-世界、记忆、日志、运行依赖、认证配置都在被忽略的 data/runtime/vendor/logs 等目录。公开提交只包括源码、锁文件和示例。升级上游依赖时一起验证客户端JAR与工具层，不能只回退其中一个。
+`client-actions/spatial/tunnel/mining`提供有界动作和反馈；`FishSpatialScan`及其他客户端类负责真实观测。上游固定版本JS运行时随包提供，来源与许可证保存在bundled/mcpfabric。
 
-开发安装验证请使用独立 profile 和 `npm pack` 产物。本轮从 `link:` 开发链接切换到 tarball 时观察到源码目录 Git 元数据受损，已从远端恢复，文件与测试核对通过；未将该切换路径作为支持承诺。不要在同一个 profile 直接替换仍指向开发源码的链接。
+可选`packages/dsh-minecraft-stream`只切换基础控制台的直播显示模式。默认普通界面不显示鲸鱼/气泡；直播模式通过游戏内HUD绘制，浏览器绿幕保留作备用。没有弹幕接收或自动推流。`FISH_OVERLAY_URL`可为开发测试指定独立的挂件数据地址，默认仍为本机控制台。
+
+## 构建与验证
+
+源码开发需要Node22.16+、Python、Git和JDK21；这些是维护者工具，不是最终用户的安装要求。
+
+```powershell
+npm ci --ignore-scripts
+git clone --depth 1 --branch v0.8.0 https://github.com/denfry/mcpfabric.git vendor/mcpfabric
+# 确认上游revision与vendor-lock.json一致。
+python -X utf8 scripts/build_helpers.py
+npm test
+node scripts/check_package.mjs
+npm pack --pack-destination outputs
+```
+
+`scripts/build_helpers.py`按版本生成兼容源并编译，Java构建产物位于artifacts/helpers，受Git忽略、由发布包携带。`scripts/bundle_runtime.mjs`从固定上游已编译dist生成随包JS副本；更新该副本前在上游mcp-server中使用仓库锁文件完成npm ci/build，保留MIT声明。
+
+```powershell
+node scripts/smoke_game.mjs --version 1.21.4 --minecraft-home D:/Games/.minecraft/versions/1.21.4/1.21.4.jar
+```
+
+省略路径时，该开发脚本从本机Gradle构建缓存复用官方客户端。它使用独立smoke-v3测试世界，真实启动/连接/挖木/截图/辅助效果/冻结/关闭，且不调用模型。输出证据在outputs/smoke；`record_validation.mjs`根据真实报告更新兼容表。可以只在本次子进程设置`FISH_PORTABLE_JAVA_ONLY=1`验证缺少系统Java时的自动下载分支。
+
+GitHub Actions按12版本编译，合并产物后运行测试、包内完整性及排除规则检查；版本标签通过构建后自动生成两个Release安装包。CI编译和本机实机验收分别记录，不互相替代。发布前应以新profile安装tarball验证，不在同一profile直接把仍指向开发源码的link安装替换为tarball。
+
+世界、凭据、日志、下载、游戏JAR和测试数据不进入公开提交或发布包。敏感凭据始终留在DSH原位置或受控子进程环境；公开挂件接口不包含控制错误或密钥。

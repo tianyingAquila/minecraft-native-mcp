@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { ROOT, DATA, PORT } from "./config.mjs";
 import { stopChildTree } from "./minecraft.mjs";
 import { ClientBridge } from "./client-bridge.mjs";
+import {readPrepared} from './versions.mjs';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export class NativeClient {
   constructor({onDisconnect = () => {}} = {}) {
@@ -14,13 +15,15 @@ export class NativeClient {
   running() {
     return Boolean(this.child?.pid) && this.child.exitCode === null;
   }
-  async start(settings) {
+  async start(settings,{signal}={}) {
+    signal?.throwIfAborted();
     if (this.running()) return this.bridge;
-    const launch = path.join(ROOT, "runtime/native-client/launch.json");
+    const prepared=readPrepared();
+    const launch = prepared?.clientProfile||path.join(ROOT, "runtime/native-client/launch.json");
     if (!fs.existsSync(launch)) throw new Error("真正玩家客户端尚未准备。");
     const config = JSON.parse(
       fs.readFileSync(
-        path.join(DATA, "native-client/config/mcpfabric.config.json"),
+        prepared?.configFile||path.join(DATA, "native-client/config/mcpfabric.config.json"),
         "utf8",
       ),
     );
@@ -37,8 +40,8 @@ export class NativeClient {
     const { args } = JSON.parse(fs.readFileSync(launch, "utf8"));
     // Launch profiles are generated per workspace; do not reuse another workspace's game directory.
     const ownedArgs = [...args];
-    ownedArgs.unshift(`-Dfishlive.controlUrl=http://127.0.0.1:${PORT}/api/overlay`);
-    ownedArgs[ownedArgs.indexOf("--gameDir") + 1] = path.join(
+    ownedArgs.unshift(`-Dfishlive.controlUrl=${process.env.FISH_OVERLAY_URL||'http://127.0.0.1:'+PORT+'/api/overlay'}`);
+    ownedArgs[ownedArgs.indexOf("--gameDir") + 1] = prepared?.gameDir||path.join(
       DATA,
       "native-client",
     );
@@ -59,11 +62,12 @@ export class NativeClient {
     let reason = "客户端未在期限内进入世界。";
     const deadline = Date.now() + 120000;
     while (Date.now() < deadline) {
+      if(signal?.aborted){await this.close();throw signal.reason;}
       if (!this.running())
         throw new Error("真正玩家客户端启动失败，请查看本机游戏日志。");
       try {
-        const session = await this.bridge.call("session.info");
-        const self = await this.bridge.call("player.getState");
+        const session = await this.bridge.call("session.info",{},{signal});
+        const self = await this.bridge.call("player.getState",{},{signal});
         if (session.player !== "DeepSeekFish")
           throw new Error("客户端玩家不是 DeepSeekFish。");
         if (self.gameMode !== "survival")

@@ -62,7 +62,8 @@ export class Agent {
     this.reactedEvent = null;
   }
   get sessionFile() {
-    return path.join(DATA, "agent-" + this.store.settings.world + ".json");
+    const version=this.store.settings.resolvedVersion||'1.21.4';
+    return path.join(DATA, "agent-" + this.store.settings.world+(version==='1.21.4'?'':'-'+version) + ".json");
   }
   load() {
     try {

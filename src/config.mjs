@@ -22,15 +22,18 @@ export const DEFAULTS = {
   nativeHudEnabled: false,
   streamingEnabled:false,
   minecraftHome:'',
+  minecraftVersion:'auto',
 };
 export function readSettings() {
+  const legacyVersion=fs.existsSync(path.join(ROOT,'runtime/native-client/launch.json'))?'1.21.4':undefined;
   try {
     return {
       ...DEFAULTS,
+      ...(legacyVersion?{resolvedVersion:legacyVersion}:{}),
       ...JSON.parse(fs.readFileSync(path.join(DATA, "settings.json"), "utf8")),
     };
   } catch {
-    return { ...DEFAULTS };
+    return { ...DEFAULTS,...legacyVersion?{resolvedVersion:legacyVersion}:{} };
   }
 }
 export function saveSettings(settings) {

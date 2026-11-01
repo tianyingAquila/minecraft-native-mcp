@@ -3,8 +3,6 @@ package dev.fishlive.client;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.HudLayerRegistrationCallback;
-import net.fabricmc.fabric.api.client.rendering.v1.IdentifiedLayer;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -22,7 +20,7 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /** Game-only presentation. Reads the same public overlay data as the browser fallback. */
-final class FishHud {
+public final class FishHud {
     private static final ResourceLocation WHALE = ResourceLocation.fromNamespaceAndPath("fishlive", "textures/gui/whale.png");
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
     private static final HttpRequest REQUEST = HttpRequest.newBuilder(URI.create(System.getProperty("fishlive.controlUrl", "http://127.0.0.1:21940/api/overlay")))
@@ -61,8 +59,6 @@ final class FishHud {
                 } finally { fetching = false; }
             });
         });
-        HudLayerRegistrationCallback.EVENT.register(layers -> layers.attachLayerBefore(IdentifiedLayer.CHAT,
-            ResourceLocation.fromNamespaceAndPath("fishlive", "audience"), FishHud::render));
     }
 
     private static String text(JsonObject object, String key, String fallback) {
@@ -129,7 +125,7 @@ final class FishHud {
         if (now < reactionUntil && now >= balanceUntil) hideAt = Math.max(hideAt, reactionUntil);
     }
 
-    private static void render(GuiGraphics graphics, DeltaTracker ignored) {
+    public static void render(GuiGraphics graphics, DeltaTracker ignored) {
         Minecraft client = Minecraft.getInstance();
         JsonObject state = snapshot;
         if (client.player == null || client.level == null || client.options.hideGui || state == null || !Boolean.parseBoolean(text(state, "hudEnabled", "true"))) return;

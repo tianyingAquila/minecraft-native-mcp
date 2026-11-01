@@ -3,10 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {createRequire} from 'node:module';
 import {stopChildTree} from '../src/minecraft.mjs';
 import {toolEnvironment,powerShellEnvironment,toolsReady} from '../src/environment.mjs';
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const PARTS=['src','web','scripts','prompts','assets','client-addon','server-addon','vendor-lock.json','package.json'];
+const PARTS=['src','web','scripts','prompts','assets','bundled','artifacts','versions.json','vendor-lock.json','package.json'];
+const require=createRequire(import.meta.url);
 export class Launcher {
   constructor({workspace=path.join(process.env.DSH_HOME||path.join(os.homedir(),'.dsh'),'minecraft-native-mcp'),managed=true,fetchImpl=fetch,spawnImpl=spawn}={}){this.workspace=workspace;this.managed=managed;this.fetch=fetchImpl;this.spawn=spawnImpl;this.child=null;this.setup=null;this.error='';}
   async ping(){try{const r=await this.fetch('http://127.0.0.1:21940/api/ping',{signal:AbortSignal.timeout(1200)});const p=await r.json();return p.app==='deepseek-minecraft-live';}catch{return false;}}
@@ -26,7 +28,23 @@ export class Launcher {
   }
   ready(){return toolsReady(this.workspace);}
   async status(){return {running:await this.ping(),ready:this.ready(),preparing:Boolean(this.setup),pendingOpen:Boolean(this.pendingOpen),owned:Boolean(this.child),error:this.error,workspace:this.workspace,url:'http://127.0.0.1:21940'};}
-  async initialize(){if(await this.ping())return;this.seed();if(!this.ready())await this.prepare();}
+  linkDependencies(){
+    // DSH already installed these package dependencies. Reuse them instead of installing a second copy.
+    for(const name of ['@modelcontextprotocol/sdk','yaml','zod']){
+      let dir=path.dirname(require.resolve(name+'/package.json'));
+      while(dir!==path.dirname(dir)){
+        const file=path.join(dir,'package.json');if(fs.existsSync(file)&&JSON.parse(fs.readFileSync(file,'utf8')).name===name)break;dir=path.dirname(dir);
+      }
+      const target=path.join(this.workspace,'node_modules',...name.split('/'));fs.mkdirSync(path.dirname(target),{recursive:true});
+      let stat;try{stat=fs.lstatSync(target);}catch{}
+      if(stat?.isSymbolicLink()&&!fs.existsSync(path.join(target,'package.json')))fs.rmdirSync(target);
+      if(!fs.existsSync(target))fs.symlinkSync(dir,target,'junction');
+    }
+    const file=path.join(this.workspace,'runtime/tools.json');fs.mkdirSync(path.dirname(file),{recursive:true});
+    const tools=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8').trimStart()):{};
+    fs.writeFileSync(file,JSON.stringify({...tools,node:process.execPath},null,2));
+  }
+  async initialize(){if(await this.ping())return;this.seed();try{this.linkDependencies();}catch{}if(!this.ready())await this.prepare();}
   prepare(){
     if(this.disposed)throw Error('插件已停用');
     if(this.setup)return this.setupDone;
@@ -45,12 +63,14 @@ export class Launcher {
     if(this.disposed)throw Error('插件已停用');
     if(await this.ping())return;
     this.seed();
+    try{this.linkDependencies();}catch{}
     if(this.setup)await this.setupDone;
     if(!this.ready())await this.prepare();
     if(this.child)throw Error('控制台正在启动，请稍候。');
     const env=toolEnvironment(this.workspace);
     const key=await this.resolveKey?.();if(typeof key==='string'&&key.trim())env.DEEPSEEK_API_KEY=key.trim();
     if(this.disposed)throw Error('插件已停用');
+    fs.mkdirSync(path.join(this.workspace,'logs'),{recursive:true});
     const output=fs.openSync(path.join(this.workspace,'logs/control.log'),'a');
     this.child=this.spawn(process.execPath,['src/server.mjs'],{cwd:this.workspace,windowsHide:true,stdio:['ignore',output,output],env});fs.closeSync(output);
     this.child.once('exit',()=>{this.child=null;});this.child.once('error',e=>{this.error=e.message;this.child=null;});

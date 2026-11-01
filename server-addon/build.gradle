@@ -1,12 +1,16 @@
 plugins { id 'net.fabricmc.fabric-loom-remap' }
-version='0.1.0'
+def mc = providers.gradleProperty('fishMinecraft').getOrElse('1.21.4')
+buildDir = file("build/${mc}")
+version='0.3.0'
 group='dev.fishlive'
-base { archivesName='fish-pause-server' }
+base { archivesName="fish-server-${mc}" }
 repositories { mavenCentral() }
 dependencies {
-  minecraft 'com.mojang:minecraft:1.21.4'
+  minecraft "com.mojang:minecraft:${mc}"
   mappings loom.officialMojangMappings()
   modImplementation 'net.fabricmc:fabric-loader:0.20.1'
 }
+sourceSets.main.java.srcDirs = ["build/${mc}/generated/java"]
+processResources { inputs.property 'minecraft', mc; filesMatching('fabric.mod.json') { expand minecraft: mc } }
 java { toolchain { languageVersion=JavaLanguageVersion.of(21) } }
 tasks.withType(JavaCompile).configureEach { options.release=21; options.encoding='UTF-8' }

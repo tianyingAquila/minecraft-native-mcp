@@ -110,7 +110,7 @@ public final class FishLiveClient implements ClientModInitializer {
             if(targetEntity instanceof net.minecraft.world.entity.LivingEntity living && living.isDeadOrDying()) {
                 o.addProperty("deathObserved",true); return o;
             }
-            if(!p.canInteractWithEntity(targetEntity,0))throw RpcException.badRequest("Target is out of melee reach.");
+            if(!ClientMc.canReachEntity(p,targetEntity,0))throw RpcException.badRequest("Target is out of melee reach.");
             Vec3 eye=p.getEyePosition(),aim=targetEntity.getBoundingBox().getCenter();
             lookAt(aim);
             var entityHit=ProjectileUtil.getEntityHitResult(p,eye,aim,p.getBoundingBox().expandTowards(aim.subtract(eye)).inflate(1),e->!e.isSpectator()&&e.isPickable(),p.entityInteractionRange()*p.entityInteractionRange());
@@ -140,7 +140,7 @@ public final class FishLiveClient implements ClientModInitializer {
         router.register("fish.screenshot",ctx->{
             Gates.vision();CompletableFuture<JsonObject> future=new CompletableFuture<>();
             Minecraft.getInstance().execute(()->{
-                try{future.complete(capture());}catch(Exception e){future.completeExceptionally(e);}
+                try{requestFrame(future);}catch(Exception e){future.completeExceptionally(e);}
             });
             try{return future.get(8,TimeUnit.SECONDS);}
             catch(InterruptedException e){Thread.currentThread().interrupt();throw RpcException.unavailable("Game frame request was interrupted.");}
@@ -158,7 +158,7 @@ public final class FishLiveClient implements ClientModInitializer {
         return visibleBlock(pos,face,true);
     }
     private static BlockHitResult visibleBlock(BlockPos pos,Direction face,boolean turn) throws RpcException {
-        var p=ClientMc.player();if(!p.canInteractWithBlock(pos,0))throw RpcException.badRequest("Block is out of interaction reach.");
+        var p=ClientMc.player();if(!ClientMc.canReachBlock(p,pos,0))throw RpcException.badRequest("Block is out of interaction reach.");
         if(ClientMc.level().getBlockState(pos).isAir())throw RpcException.badRequest("Support block is AIR at "+pos.toShortString()+"; use place_block_at for a target empty position, or choose a real supporting block.");
         Vec3 aim=Vec3.atCenterOf(pos);if(face!=null)aim=aim.add(face.getStepX()*0.499,face.getStepY()*0.499,face.getStepZ()*0.499);
         BlockHitResult hit=null;
@@ -215,11 +215,19 @@ public final class FishLiveClient implements ClientModInitializer {
         if(mc.gameMode!=null)mc.gameMode.stopDestroyBlock();
     }
 
-    private static JsonObject capture() throws Exception {
+    private static void requestFrame(CompletableFuture<JsonObject> future) throws Exception {
         var mc=ClientMc.mc();ClientMc.player();ClientMc.level();
         if(GLFW.glfwGetWindowAttrib(mc.getWindow().getWindow(),GLFW.GLFW_ICONIFIED)!=0)throw RpcException.unavailable("Game window is minimized; no fresh render frame.");
+        takeFrame(image->CompletableFuture.runAsync(()->{
+            try{future.complete(capture(image));}catch(Exception e){future.completeExceptionally(e);}
+        }));
+    }
+    private static void takeFrame(java.util.function.Consumer<NativeImage> done){
+        done.accept(Screenshot.takeScreenshot(ClientMc.mc().getMainRenderTarget()));
+    }
+    private static JsonObject capture(NativeImage frame) throws Exception {
         Path tmp=Files.createTempFile("fish-game-frame-",".png");
-        try(NativeImage image=Screenshot.takeScreenshot(mc.getMainRenderTarget())){
+        try(NativeImage image=frame){
             image.writeToFile(tmp);
             BufferedImage original=ImageIO.read(tmp.toFile());
             int longest=Math.min(1280,Math.max(original.getWidth(),original.getHeight()));

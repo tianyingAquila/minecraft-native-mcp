@@ -11,6 +11,7 @@ import { normalizeToolArgs } from './tool-args.mjs';
 import { mineBlock } from './mining.mjs';
 import { digTunnel } from './tunnel.mjs';
 import { spatialOverview } from './spatial.mjs';
+import {gameWorldName,readPrepared} from './versions.mjs';
 const ALLOWED = new Set([
   "agent_brief",
   "observe",
@@ -188,10 +189,10 @@ export class ClientActions {
     this.active = null;
     this.execution = new AsyncLocalStorage();
   }
-  async connect() {
+  async connect({signal}={}) {
     if (this.client) return;
     if (this.nativeClient)
-      this.bridge = await this.nativeClient.start(this.store.settings);
+      this.bridge = await this.nativeClient.start(this.store.settings,{signal});
     const identity = await this.bridge.call("session.info");
     if (identity.player !== "DeepSeekFish")
       throw new ServiceError(
@@ -200,7 +201,7 @@ export class ClientActions {
       );
     this.worldId = identity.worldId;
     await this.bridge.call("fish.navigationStatus");
-    const base = path.join(ROOT, "vendor/mcpfabric/mcp-server");
+    const base = path.join(ROOT, "bundled/mcpfabric");
     const [{ AgentRuntime }, { AGENT_TOOLS, AgentSession }] = await Promise.all(
       ["runtime", "tools"].map(
         (name) =>
@@ -226,7 +227,7 @@ export class ClientActions {
     const proxy = { call: (method, args = {}) => this.upstreamCall(method, args) };
     fs.mkdirSync(DATA, { recursive: true });
     this.rt = new AgentRuntime(proxy, {
-      dbPath: path.join(DATA, "client-agent-" + this.store.settings.world + ".sqlite"),
+      dbPath: path.join(DATA, "client-agent-" + gameWorldName(this.store.settings) + ".sqlite"),
     });
     this.session = new AgentSession();
     this.client = true;

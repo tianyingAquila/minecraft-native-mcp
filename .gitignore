@@ -20,3 +20,6 @@ server-addon/build/
 *.local.json
 .env.*
 *.tgz
+
+# Generated release artifacts are rebuilt by CI and included by npm pack.
+artifacts/

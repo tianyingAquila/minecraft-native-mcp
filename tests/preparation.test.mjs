@@ -7,11 +7,12 @@ import vm from 'node:vm';
 import {createHash} from 'node:crypto';
 import {Runtime} from '../src/runtime.mjs';
 import {Store} from '../src/state.mjs';
-import {findMinecraft,toolsReady,toolEnvironment,powerShellEnvironment} from '../src/environment.mjs';
+import {toolsReady,toolEnvironment,powerShellEnvironment} from '../src/environment.mjs';
+import {findInstalledGames} from '../src/versions.mjs';
 import {frontendScript} from '../dsh/index.mjs';
 
 function fakeRuntime(){
- const r=new Runtime();clearInterval(r.timer);r.store=new Store({persist:false});r.environmentPrepare=async()=>{};r.refreshBalance=async()=>({available:true,micros:5000000});
+ const r=new Runtime();clearInterval(r.timer);r.store=new Store({persist:false});r.environmentPrepare=async()=>{};r.portCheck=async()=>{};r.refreshBalance=async()=>({available:true,micros:5000000});
  r.minecraft={start:async()=>{},freeze:async()=>{},command:()=>{}};
  r.mcp={connect:async()=>{},status:async()=>({result:{situation:{vitals:{health:20,food:20}}}}),freeze:async()=>{},close:async()=>{},cancel:async()=>{}};
  return r;
@@ -26,15 +27,19 @@ test('取消准备会取消环境任务，任务未完成时不启动游戏',asy
  const r=fakeRuntime();let started=false;r.minecraft.start=async()=>{started=true;};r.environmentPrepare=(_,opts)=>new Promise((resolve,reject)=>opts.signal.addEventListener('abort',()=>reject(new DOMException('cancelled','AbortError'))));
  const preparing=r.prepare().catch(()=>{});await new Promise(resolve=>setTimeout(resolve,0));await r.pause();await preparing;assert.equal(started,false);assert.equal(r.store.status,'paused');
 });
+test('准备完成后关闭游戏会清除连接并要求重新准备，不能继续展示ready',async()=>{
+ const r=fakeRuntime();r.store.status='ready';r.store.connected=true;r.mcp.bridge={};r.observer.onDisconnect();await r.pauseTask;await new Promise(resolve=>setTimeout(resolve,0));
+ assert.equal(r.store.connected,false);assert.equal(r.store.status,'error');assert.equal(r.store.setup.error.code,'CLIENT_CLOSED');assert.equal(r.mcp.bridge,null);
+});
 test('双注入且模式栏尚未出现时只创建一个入口观察器，避免两个按钮互相移动',()=>{
  let observers=0,panels=0;
  const context={window:{},document:{getElementById:()=>null,querySelectorAll:()=>[],createElement:tag=>({style:{},querySelector:()=>({}),querySelectorAll:()=>[],hidden:false}),body:{append:()=>panels++}},MutationObserver:class{constructor(){observers++;}observe(){}},setTimeout:()=>{}};
  vm.runInNewContext(frontendScript,context);vm.runInNewContext(frontendScript,context);assert.equal(observers,1);assert.equal(panels,1);
 });
-test('游戏本体按固定SHA1识别，错误版本不接受；缺失工具不靠旧manifest冒充齐全',()=>{
+test('游戏本体按固定SHA1识别，错误版本不接受；缺失工具不靠旧manifest冒充齐全',async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'minecraft-preparation-'));
  try{
-  const home=path.join(root,'game');fs.mkdirSync(home);const bytes=Buffer.from('fixture-game'),sha=createHash('sha1').update(bytes).digest('hex');fs.writeFileSync(path.join(home,'client.jar'),'wrong');assert.equal(findMinecraft(home,root,sha),null);fs.writeFileSync(path.join(home,'client.jar'),bytes);assert.equal(findMinecraft(home,root,sha),home);
+  const home=path.join(root,'game');fs.mkdirSync(home);const bytes=Buffer.from('fixture-game'),sha=createHash('sha1').update(bytes).digest('hex');fs.writeFileSync(path.join(home,'client.jar'),'wrong');assert.equal((await findInstalledGames(home,root,[{id:'1.21.4',client:{sha1:sha}}])).length,0);fs.writeFileSync(path.join(home,'client.jar'),bytes);assert.equal((await findInstalledGames(home,root,[{id:'1.21.4',client:{sha1:sha}}]))[0].home,home);
   fs.mkdirSync(path.join(root,'runtime'));fs.writeFileSync(path.join(root,'runtime/tools.json'),'\ufeff'+JSON.stringify({java:'missing.exe',javaHome:'missing',node:'missing',python:'missing',git:'missing'}));assert.equal(toolsReady(root),false);assert.equal(toolEnvironment(root,{PATH:'previous'}).FISH_JAVA,'missing.exe');
   if(process.platform==='win32')assert.match(powerShellEnvironment({PSModulePath:'PowerShell7',SystemRoot:'C:\\Windows'}).PSModulePath,/WindowsPowerShell/);
  }finally{assert.ok(path.resolve(root).startsWith(path.resolve(os.tmpdir())+path.sep));fs.rmSync(root,{recursive:true,force:true});}

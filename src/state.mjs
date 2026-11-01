@@ -1,11 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DATA, FIXED_NOTE, readSettings, saveSettings } from "./config.mjs";
+import {SetupState} from './setup-state.mjs';
+import {SUPPORTED_VERSIONS} from './versions.mjs';
 export class Store {
   constructor({ persist = true } = {}) {
     this.persist = persist;
     this.settings = readSettings();
     this.status = "idle";
+    this.setup=new SetupState();this.environment=null;
     this.reason = "";
     this.balance = null;
     this.balanceError = "";
@@ -34,7 +37,7 @@ export class Store {
         const saved = JSON.parse(
           fs.readFileSync(path.join(DATA, "run-state.json"), "utf8"),
         );
-        if (saved.settings?.world === this.settings.world) {
+        if (saved.settings?.world === this.settings.world && (saved.settings?.resolvedVersion||'1.21.4')===(this.settings.resolvedVersion||'1.21.4')) {
           this.goal = saved.goal || this.goal;
           if (saved.status !== "stopped")
             this.runningMs = Number(saved.runningMs) || 0;
@@ -97,6 +100,7 @@ export class Store {
       throw new Error("请先暂停，再修改时长或世界。");
     if(patch.streamingEnabled!==undefined){if(typeof patch.streamingEnabled!=='boolean')throw new Error('直播扩展开关无效');this.settings.streamingEnabled=patch.streamingEnabled;}
     if(patch.minecraftHome!==undefined){if(typeof patch.minecraftHome!=='string'||patch.minecraftHome.length>1024)throw new Error('游戏目录无效');this.settings.minecraftHome=patch.minecraftHome.trim();}
+    if(patch.minecraftVersion!==undefined){if(patch.minecraftVersion!=='auto'&&!SUPPORTED_VERSIONS.includes(patch.minecraftVersion))throw new Error('请选择支持的1.21系列正式版本。');this.settings.minecraftVersion=patch.minecraftVersion;}
     if (patch.nativeHudEnabled !== undefined) {
       if (typeof patch.nativeHudEnabled !== "boolean") throw new Error("游戏内挂件开关无效。");
       this.settings.nativeHudEnabled = patch.nativeHudEnabled;
@@ -132,6 +136,7 @@ export class Store {
       hunger: this.hunger,
       position: this.position,
       actionPlan:this.commentary?.text??'',
+      setup:this.setup.snapshot(),environment:this.environment,
       inventory: this.inventory,
       deaths: this.deaths,
       remainingMs: this.remaining(),

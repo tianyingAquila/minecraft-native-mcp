@@ -18,6 +18,24 @@
         </div>
         <span class="quiet" id="display-mode">普通游玩模式</span>
       </header>
+      <section class="preparation" aria-labelledby="setup-title">
+        <div class="section-heading"><div><h2 id="setup-title">先准备好这一局</h2><p id="setup-description">选择已有游戏，剩下的运行环境由插件准备。存档独立保存。</p></div><div class="setup-heading-actions"><button id="toggle-setup" hidden>展开准备详情</button><button id="check-environment" class="secondary">重新检查</button></div></div>
+        <div class="setup-grid">
+          <form id="settings">
+            <label>游戏版本<select id="minecraft-version"><option value="auto">自动选择已有版本</option></select></label>
+            <label>已有游戏文件夹<div class="directory-field"><input id="minecraft-home" placeholder="自动查找；也可选择第三方启动器的游戏目录" type="text" /><button id="choose-directory" type="button">选择文件夹</button></div></label>
+            <p class="field-help">支持 Java1.21系列正式版。游戏本体需要先在你的启动器安装。</p>
+            <div id="detected-games" class="detected-games"></div>
+            <div class="session-options"><label>每场时长<span><input id="duration" type="number" min="1" max="720" value="120" /> 分钟</span></label><label>游戏世界<select id="world-select"><option value="rehearsal">排练世界</option><option value="live">正式世界</option></select></label></div>
+            <label class="stream-only" hidden><span><input id="native-hud" type="checkbox" /> 游戏内鲸鱼与气泡</span></label>
+            <div class="actions"><button id="prepare" type="button" data-action="prepare" class="primary">准备游戏</button><button type="submit" class="secondary">保存设置</button><button id="cancel-prepare" type="button" data-action="pause" hidden>取消准备</button></div>
+            <p id="setup-summary" class="field-help" role="status">正在检查本机环境…</p>
+          </form>
+          <div class="environment"><h3>环境检查</h3><ul id="environment-checks" class="checklist"><li>正在识别已有游戏和运行环境…</li></ul></div>
+        </div>
+        <div id="setup-progress" hidden aria-live="polite"><div class="progress-heading"><strong id="progress-title">正在准备</strong><span id="progress-time"></span></div><progress id="download-progress" max="100"></progress><p id="download-detail" class="field-help"></p><ol id="setup-steps" class="setup-steps"></ol></div>
+        <section id="setup-problem" class="problem" hidden role="alert"><h3 id="problem-title"></h3><p id="problem-hint"></p><details><summary>查看具体原因</summary><pre id="problem-detail"></pre></details><div class="actions"><button id="retry-setup">重新准备</button><button id="fix-directory">检查游戏目录</button><button id="copy-diagnostics">复制诊断信息</button></div></section>
+      </section>
       <div class="workspace">
         <section class="operation">
           <div class="status-line">
@@ -28,8 +46,7 @@
           <p id="reason" class="reason">先准备游戏环境，再开始冒险。</p>
           <p id="action-plan"></p>
           <div class="actions">
-            <button id="prepare" data-action="prepare">准备游戏</button
-            ><button id="start" data-action="start" class="primary">
+            <button id="start" data-action="start" class="primary">
               开始冒险</button
             ><button id="pause" data-action="pause">暂停整局</button
             ><button id="stop" data-action="stop" class="stop">
@@ -54,29 +71,6 @@
             生命回复 I<span>抗性提升 I</span><span>夜视 I</span><span>死亡不掉落</span
             ><small>由服务端应用，模型已知规则</small>
           </div>
-          <form id="settings">
-            <label>已有游戏目录（未自动找到时填写）<input id="minecraft-home" placeholder="包含 Minecraft Java 1.21.4 的 .minecraft 目录" type="text" /></label>
-            <label
-              >每场时长
-              <span
-                ><input
-                  id="duration"
-                  type="number"
-                  min="1"
-                  max="720"
-                  value="120"
-                />
-                分钟</span
-              ></label
-            ><label
-              >游戏世界
-              <select id="world-select">
-                <option value="rehearsal">排练世界</option>
-                <option value="live">正式世界</option>
-              </select></label
-            ><label class="stream-only" hidden><span><input id="native-hud" type="checkbox" /> 游戏内鲸鱼与气泡</span></label
-            ><button type="submit">保存设置</button>
-          </form>
           <p id="balance-error" class="error"></p>
           <p id="notice" role="status"></p>
           <p id="vision-state">截图诊断：本次启动尚未调用</p>
@@ -130,6 +124,7 @@
         </button>
       </footer>
     </main>
+    <dialog id="error-dialog" aria-labelledby="dialog-title"><form method="dialog"><button class="dialog-close" aria-label="关闭提示">×</button></form><h2 id="dialog-title">准备没有完成</h2><p id="dialog-hint"></p><p id="dialog-step" class="field-help"></p><div class="actions"><button id="dialog-retry" class="primary">重新准备</button><button id="dialog-directory">检查游戏目录</button><button id="dialog-dismiss">知道了</button></div></dialog>
     <script type="module" src="/web/control.mjs"></script>
   </body>
 </html>

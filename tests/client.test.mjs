@@ -29,7 +29,7 @@ test("容器刚打开暂时为空时，等待真实物品同步后再报告", as
   assert.equal(state.slots[0]?.count,9);
 });
 test("取消发生在上游创建job之前，晚创建job也必须终止", async () => {
-  const { JobManager } = await import("../vendor/mcpfabric/mcp-server/dist/agent/jobs.js");
+  const { JobManager } = await import("../bundled/mcpfabric/dist/agent/jobs.js");
   let release;
   const gate = new Promise(r => { release = r; });
   let moves = 0;
