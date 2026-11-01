@@ -151,7 +151,7 @@ function renderPreparation(s){
  document.querySelector('.preparation').classList.toggle('collapsed',setupCollapsed);
  $('toggle-setup').hidden=!['ready','paused','running'].includes(s.status);$('toggle-setup').textContent=setupCollapsed?'展开准备详情':'收起准备详情';
  $('setup-title').textContent=setupCollapsed?'游戏环境已就绪':'先准备好这一局';
- $('setup-description').textContent=setupCollapsed?'Minecraft Java '+(s.settings.resolvedVersion||env?.preparedVersion||'')+' · 世界独立保存，可以开始冒险。':'选择已有游戏，剩下的运行环境由插件准备。存档独立保存。';
+ $('setup-description').textContent=setupCollapsed?'Minecraft Java '+(s.settings.resolvedVersion||env?.preparedVersion||'')+' · 世界独立保存，可以开始冒险。':'先确认已有环境，仅缺失时下载；同一版本复用原目录和缓存。';
  $('check-environment').disabled=busy||checkBusy;$('choose-directory').disabled=busy||directoryBusy;$('cancel-prepare').hidden=s.status!=='preparing';
  if(env){
   const selected=$('minecraft-version').value;

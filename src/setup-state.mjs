@@ -1,6 +1,6 @@
 export const SETUP_STEPS=[
- ['check','检查已有游戏与账户'],['java','准备 Java 运行环境'],['server','准备独立游戏服务器'],
- ['libraries','补齐游戏运行库'],['mods','安装对应版本模组'],['profiles','生成独立启动配置'],
+ ['check','检查已有游戏与账户'],['java','确认 Java 运行环境'],['server','确认游戏服务器'],
+ ['libraries','确认游戏运行库'],['mods','确认对应版本模组'],['profiles','确认游戏启动配置'],
  ['launch','启动 Minecraft'],['bridge','连接游戏工具'],['freeze','保存并暂停，等待开始'],
 ];
 export class SetupError extends Error{
