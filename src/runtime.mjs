@@ -15,16 +15,9 @@ import {SetupError} from './setup-state.mjs';
 export class Runtime {
   constructor() {
     this.store = new Store();
-    this.minecraft = new Minecraft(this.store);
+    this.minecraft = new Minecraft(this.store,{onDisconnect:()=>this.gameDisconnected('SERVER_CLOSED','游戏服务器已退出')});
     this.legacy = false;
-    this.observer = new NativeClient({onDisconnect: () => {
-      if (["running","ready"].includes(this.store.status)) {
-        this.store.connected=false;
-        this.mcp.bridge=null;
-        this.store.setup.fail(new SetupError('CLIENT_CLOSED','bridge','游戏窗口已关闭','','点击准备游戏重新启动客户端；已有世界已保存。'));
-        void this.pause("game_offline", "游戏客户端已退出，已保存暂停。").then(()=>{this.store.status='error';this.store.save();});
-      }
-    }});
+    this.observer = new NativeClient({onDisconnect:()=>this.gameDisconnected('CLIENT_CLOSED','游戏窗口已关闭')});
     this.mcp = new ClientActions({ store: this.store, nativeClient: this.observer });
     this.vision = this.legacy
       ? null
@@ -46,6 +39,13 @@ export class Runtime {
         void this.pause("duration", "本场时长已到，已保存并暂停游戏。");
     }, 1000);
     this.timer.unref();
+  }
+  gameDisconnected(code,title) {
+    if (!["running","ready"].includes(this.store.status)) return;
+    this.store.connected=false;
+    this.mcp.bridge=null;
+    this.store.setup.fail(new SetupError(code,'bridge',title,'','点击准备游戏重新启动；已有存档会保留。'));
+    void this.pause('game_offline',title+'，已暂停。').then(()=>{this.store.status='error';this.store.save();});
   }
   observe(value) {
     const body = value?.response?.data || value?.output || value;
@@ -92,7 +92,9 @@ export class Runtime {
           const balance=await this.refreshBalance();
           if(!balance.available||balance.micros<1000000)throw new Error('DeepSeek 账户不可用或余额不足 ¥1，请在 DSH 配置官方API凭据并充值。');
         }
-        if(this.minecraft.child?.exitCode===null){await this.observer.close();await this.mcp.close();await this.minecraft.stop();}
+        await this.observer.close();
+        await this.mcp.close();
+        if(this.minecraft.child?.exitCode===null)await this.minecraft.stop();
         await this.portCheck(this.store.settings);
         const prepared=await this.environmentPrepare(this.store.settings,{signal:this.preparationController.signal,onProgress:(step,detail)=>{
           this.store.setup.update(step,detail);this.store.reason=detail.message||'正在准备环境';

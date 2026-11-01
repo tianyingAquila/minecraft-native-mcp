@@ -48,7 +48,7 @@ async function unpack(archive,destination,{signal,nativeOnly=false,root=ROOT}={}
 async function ensureJava(root,signal,progress){
  let java=await locateJava(root);if(java){progress('java',{message:java.version});return java;}
  progress('java',{message:'正在获取便携 Java21，无需管理员权限'});
- let packages;try{const r=await fetch('https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=x64&image_type=jre&os=windows&vendor=eclipse',{signal:signal?AbortSignal.any([signal,AbortSignal.timeout(30000)]):AbortSignal.timeout(30000)});if(!r.ok)throw Error('HTTP '+r.status);packages=await r.json();}catch(e){throw new SetupError('JAVA_DOWNLOAD','java','无法获取 Java21 运行环境',e.message,'检查网络后重试；也可使用已安装的Java21。');}
+ let packages;try{const r=await fetch('https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=x64&image_type=jre&os=windows&vendor=eclipse',{signal:signal?AbortSignal.any([signal,AbortSignal.timeout(30000)]):AbortSignal.timeout(30000)});if(!r.ok)throw Error('HTTP '+r.status);packages=await r.json();}catch(e){if(signal?.aborted)throw signal.reason;throw new SetupError('JAVA_DOWNLOAD','java','无法获取 Java21 运行环境',e.message,'检查网络后重试；也可使用已安装的Java21。');}
  const pkg=packages[0]?.binary?.package;if(!pkg?.checksum||!pkg?.link)throw new SetupError('JAVA_PACKAGE','java','Java 下载源没有返回可用文件','','稍后重试。');
  const archive=path.join(root,'runtime/downloads/java21.zip');await downloadVerified({url:pkg.link,hash:pkg.checksum,algorithm:'sha256',size:pkg.size},archive,{signal,onProgress:p=>progress('java',{message:'正在下载 Java21',progress:p})});
  progress('java',{message:'正在解压便携 Java21'});await unpack(archive,path.join(root,'runtime/tools/java'),{signal,root});writeJson(path.join(root,'runtime/tools/java/ready.json'),{sha256:pkg.checksum});java=await locateJava(root);
@@ -97,7 +97,7 @@ export async function prepareGameEnvironment(settings,{root=ROOT,signal,onProgre
  const profileUrl='https://meta.fabricmc.net/v2/versions/loader/'+game.version+'/'+VERSION_MATRIX.loader+'/profile/json';let profile;
  try{const response=await fetch(profileUrl,{signal:combined});if(!response.ok)throw Error('HTTP '+response.status);profile=await response.json();}catch(e){if(signal?.aborted)throw signal.reason;throw new SetupError('FABRIC_PROFILE','mods','无法读取 Fabric 启动配置',e.message,'检查能否访问 meta.fabricmc.net，然后重试。');}
  const fabricLibraries=[];for(const lib of profile.libraries){const [group,name,version]=lib.name.split(':'),relative=group.replaceAll('.','/')+'/'+name+'/'+version+'/'+name+'-'+version+'.jar',target=path.join(librariesRoot,relative),url=lib.url.replace(/\/$/,'')+'/'+relative;
-  let hash;try{const r=await fetch(url+'.sha1',{signal:combined});if(!r.ok)throw Error('HTTP '+r.status);hash=(await r.text()).trim().split(/\s/)[0];if(!/^[0-9a-f]{40}$/i.test(hash))throw Error('无有效校验值');}catch(e){throw new SetupError('FABRIC_LIBRARY','mods','无法核验 Fabric 运行库',name+'：'+e.message,'检查下载网络后重试。');}
+  let hash;try{const r=await fetch(url+'.sha1',{signal:combined});if(!r.ok)throw Error('HTTP '+r.status);hash=(await r.text()).trim().split(/\s/)[0];if(!/^[0-9a-f]{40}$/i.test(hash))throw Error('无有效校验值');}catch(e){if(signal?.aborted)throw signal.reason;throw new SetupError('FABRIC_LIBRARY','mods','无法核验 Fabric 运行库',name+'：'+e.message,'检查下载网络后重试。');}
   await pull({url,hash,algorithm:'sha1'},target,'mods','准备 Fabric 运行库');fabricLibraries.push(target);}
  onProgress('profiles',{message:'生成独立游戏配置，保留已有存档'});
  const configFile=path.join(gameDir,'config/mcpfabric.config.json');let config={};try{config=readJson(configFile);}catch{}

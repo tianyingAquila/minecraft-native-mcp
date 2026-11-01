@@ -45,7 +45,7 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": false
+        "nativeHud": true
       }
     },
     {
@@ -89,7 +89,7 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": false
+        "nativeHud": true
       }
     },
     {
@@ -133,7 +133,7 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": false
+        "nativeHud": true
       }
     },
     {
@@ -177,7 +177,7 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": false
+        "nativeHud": true
       }
     },
     {
@@ -221,7 +221,7 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": false
+        "nativeHud": true
       }
     },
     {
@@ -265,7 +265,7 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": false
+        "nativeHud": true
       }
     },
     {
@@ -309,7 +309,7 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": false
+        "nativeHud": true
       }
     },
     {
@@ -353,7 +353,7 @@
       "validation": {
         "compiled": true,
         "smoke": true,
-        "nativeHud": false
+        "nativeHud": true
       }
     },
     {

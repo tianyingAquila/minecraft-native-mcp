@@ -31,6 +31,12 @@ test('准备完成后关闭游戏会清除连接并要求重新准备，不能�
  const r=fakeRuntime();r.store.status='ready';r.store.connected=true;r.mcp.bridge={};r.observer.onDisconnect();await r.pauseTask;await new Promise(resolve=>setTimeout(resolve,0));
  assert.equal(r.store.connected,false);assert.equal(r.store.status,'error');assert.equal(r.store.setup.error.code,'CLIENT_CLOSED');assert.equal(r.mcp.bridge,null);
 });
+test('服务端异常退出立即取消ready，重新准备先清理自己的残留客户端再查端口',async()=>{
+ const r=fakeRuntime();r.store.status='ready';r.store.connected=true;r.gameDisconnected('SERVER_CLOSED','游戏服务器已退出');await r.pauseTask;await new Promise(resolve=>setTimeout(resolve,0));
+ assert.equal(r.store.status,'error');assert.equal(r.store.connected,false);assert.equal(r.store.setup.error.code,'SERVER_CLOSED');
+ const steps=[];r.minecraft.child={exitCode:1};r.observer.close=async()=>steps.push('close-client');r.mcp.close=async()=>steps.push('close-mcp');r.portCheck=async()=>{assert.deepEqual(steps.slice(0,2),['close-client','close-mcp']);};
+ await r.prepare({requireModel:false});assert.equal(r.store.status,'ready');
+});
 test('双注入且模式栏尚未出现时只创建一个入口观察器，避免两个按钮互相移动',()=>{
  let observers=0,panels=0;
  const context={window:{},document:{getElementById:()=>null,querySelectorAll:()=>[],createElement:tag=>({style:{},querySelector:()=>({}),querySelectorAll:()=>[],hidden:false}),body:{append:()=>panels++}},MutationObserver:class{constructor(){observers++;}observe(){}},setTimeout:()=>{}};

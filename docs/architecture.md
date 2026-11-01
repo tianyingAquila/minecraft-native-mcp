@@ -43,6 +43,8 @@ node scripts/smoke_game.mjs --version 1.21.4 --minecraft-home D:/Games/.minecraf
 
 省略路径时，该开发脚本从本机Gradle构建缓存复用官方客户端。它使用独立smoke-v3测试世界，真实启动/连接/挖木/截图/辅助效果/冻结/关闭，且不调用模型。输出证据在outputs/smoke；`record_validation.mjs`根据真实报告更新兼容表。可以只在本次子进程设置`FISH_PORTABLE_JAVA_ONLY=1`验证缺少系统Java时的自动下载分支。
 
+2026-11-01安装验收使用独立DSH profile安装两个tarball，创建空工作区，强制只用便携Java。实测缺游戏提示、选择已有游戏目录、下载Java、取消/重试、准备并冻结、关闭游戏后的失效提示、缓存重开及原生气泡。它复用了本机已有DSH和游戏安装/资源，不等于全新Windows电脑或所有网络环境的验收；原生文件夹选择对话框仍需人工点选。
+
 GitHub Actions按12版本编译，合并产物后运行测试、包内完整性及排除规则检查；版本标签通过构建后自动生成两个Release安装包。CI编译和本机实机验收分别记录，不互相替代。发布前应以新profile安装tarball验证，不在同一profile直接把仍指向开发源码的link安装替换为tarball。
 
 世界、凭据、日志、下载、游戏JAR和测试数据不进入公开提交或发布包。敏感凭据始终留在DSH原位置或受控子进程环境；公开挂件接口不包含控制错误或密钥。

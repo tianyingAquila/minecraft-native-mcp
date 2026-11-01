@@ -89,8 +89,9 @@ export function createWorldFiles(worldDir, settings) {
   );
 }
 export class Minecraft {
-  constructor(store) {
+  constructor(store,{onDisconnect=()=>{}}={}) {
     this.store = store;
+    this.onDisconnect=onDisconnect;
     this.child = null;
     this.lines = [];
     this.world = null;
@@ -187,6 +188,7 @@ export class Minecraft {
         clearTimeout(timeout);
         log.end();
         reject(new Error("Minecraft 服务端退出，代码 " + code));
+        if(this.child===child)this.onDisconnect();
       });
     });
     try {
