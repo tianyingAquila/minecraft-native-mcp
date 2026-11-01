@@ -22,7 +22,7 @@ export async function locateJava(root=ROOT){
  for(const parent of [...portableOnly?[]:[path.join(process.env.ProgramFiles||'C:/Program Files','Microsoft'),path.join(process.env.ProgramFiles||'C:/Program Files','Eclipse Adoptium')],path.join(root,'runtime/tools/java')]){
   try{for(const name of await fs.promises.readdir(parent))candidates.push(path.join(parent,name,'bin/java.exe'));}catch{}
  }
- for(const file of [...new Set(candidates.filter(Boolean))])try{const {stdout,stderr}=await execute(file,['--version'],{windowsHide:true,timeout:5000});if(/(?:openjdk|java) 21[. ]/.test(stdout+stderr))return {java:file,javaHome:path.dirname(path.dirname(file)),version:(stdout+stderr).split(/\r?\n/)[0]};}catch{}
+ for(const file of [...new Set(candidates.filter(Boolean))])try{if(path.resolve(file).startsWith(path.resolve(root,'runtime/tools/java')+path.sep)&&!fs.existsSync(path.join(root,'runtime/tools/java/ready.json')))continue;const {stdout,stderr}=await execute(file,['--version'],{windowsHide:true,timeout:5000});if(/(?:openjdk|java) 21[. ]/.test(stdout+stderr))return {java:file,javaHome:path.dirname(path.dirname(file)),version:(stdout+stderr).split(/\r?\n/)[0]};}catch{}
  return null;
 }
 function helperManifest(root=ROOT){try{return readJson(path.join(root,'artifacts/helpers/manifest.json'));}catch{return {versions:{}};}}
@@ -51,7 +51,7 @@ async function ensureJava(root,signal,progress){
  let packages;try{const r=await fetch('https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=x64&image_type=jre&os=windows&vendor=eclipse',{signal:signal?AbortSignal.any([signal,AbortSignal.timeout(30000)]):AbortSignal.timeout(30000)});if(!r.ok)throw Error('HTTP '+r.status);packages=await r.json();}catch(e){throw new SetupError('JAVA_DOWNLOAD','java','无法获取 Java21 运行环境',e.message,'检查网络后重试；也可使用已安装的Java21。');}
  const pkg=packages[0]?.binary?.package;if(!pkg?.checksum||!pkg?.link)throw new SetupError('JAVA_PACKAGE','java','Java 下载源没有返回可用文件','','稍后重试。');
  const archive=path.join(root,'runtime/downloads/java21.zip');await downloadVerified({url:pkg.link,hash:pkg.checksum,algorithm:'sha256',size:pkg.size},archive,{signal,onProgress:p=>progress('java',{message:'正在下载 Java21',progress:p})});
- progress('java',{message:'正在解压便携 Java21'});await unpack(archive,path.join(root,'runtime/tools/java'),{signal,root});java=await locateJava(root);
+ progress('java',{message:'正在解压便携 Java21'});await unpack(archive,path.join(root,'runtime/tools/java'),{signal,root});writeJson(path.join(root,'runtime/tools/java/ready.json'),{sha256:pkg.checksum});java=await locateJava(root);
  if(!java)throw new SetupError('JAVA_START','java','便携 Java21 没有正常启动','','重新准备以检查下载文件。');return java;
 }
 function allowed(rules){let yes=!rules;for(const rule of rules||[]){const spec=rule.os||{};let match=!spec.name||spec.name==='windows';if(spec.arch)match&&=new RegExp(spec.arch).test('amd64');if(rule.features){const features={has_quick_plays_support:true,is_quick_play_multiplayer:true};match&&=Object.entries(rule.features).every(([k,v])=>Boolean(features[k])===v);}if(match)yes=rule.action==='allow';}return yes;}
@@ -77,7 +77,7 @@ export async function prepareGameEnvironment(settings,{root=ROOT,signal,onProgre
   const classifier=lib.natives?.windows?.replace('${arch}','64'),n=lib.downloads?.classifiers?.[classifier];if(n){const target=path.join(librariesRoot,n.path);jobs.push([n,target]);nativeJars.push(target);}}
  const assetsRoot=path.join(root,'runtime/assets'),indexFile=path.join(assetsRoot,'indexes',meta.assets+'.json');await pull(meta.assetIndex,indexFile,'libraries','读取声音与材质清单');const index=readJson(indexFile);
  const sharedAssets=[process.env.FISH_ASSET_ROOT,path.join(game.home,'assets'),path.join(game.home,'../../assets'),path.join(process.env.APPDATA||os.homedir(),'.minecraft/assets')].filter(Boolean);
- for(const a of Object.values(index.objects)){const relative=path.join('objects',a.hash.slice(0,2),a.hash),target=path.join(assetsRoot,relative);if(!fs.existsSync(target)){const cached=sharedAssets.map(base=>path.join(base,relative)).find(p=>fs.existsSync(p));if(cached&&await verifiedFile(cached,a.hash,'sha1')){await fs.promises.mkdir(path.dirname(target),{recursive:true});await fs.promises.copyFile(cached,target);continue;}}
+ for(const a of Object.values(index.objects)){signal?.throwIfAborted();const relative=path.join('objects',a.hash.slice(0,2),a.hash),target=path.join(assetsRoot,relative);if(!fs.existsSync(target)){const cached=sharedAssets.map(base=>path.join(base,relative)).find(p=>fs.existsSync(p));if(cached&&await verifiedFile(cached,a.hash,'sha1')){await fs.promises.mkdir(path.dirname(target),{recursive:true});await fs.promises.copyFile(cached,target);continue;}}
   jobs.push([{url:'https://resources.download.minecraft.net/'+a.hash.slice(0,2)+'/'+a.hash,sha1:a.hash,size:a.size},target]);}
  const queue=[...new Map(jobs.map(job=>[path.resolve(job[1]),job])).values()];
  let done=0,firstFailure;onProgress('libraries',{message:'正在核验 '+queue.length+' 个运行文件'});

@@ -24,6 +24,11 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/.gradle/caches
+          key: gradle-${{ runner.os }}-${{ matrix.minecraft }}-${{ hashFiles('versions.json', 'client-addon/**', 'server-addon/**', 'scripts/build_helpers.py') }}
+          restore-keys: gradle-${{ runner.os }}-${{ matrix.minecraft }}-
       - name: Fetch fixed upstream build wrapper
         shell: pwsh
         run: |
@@ -58,8 +63,9 @@ jobs:
           npm pack --pack-destination outputs
           npm pack ./packages/dsh-minecraft-stream --pack-destination outputs
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $streamVersion = (Get-Content packages/dsh-minecraft-stream/package.json -Raw | ConvertFrom-Json).version
           Copy-Item "outputs/minecraft-native-mcp-$version.tgz" outputs/minecraft-native-mcp.tgz
-          Copy-Item "outputs/dsh-minecraft-stream-$version.tgz" outputs/dsh-minecraft-stream.tgz
+          Copy-Item "outputs/dsh-minecraft-stream-$streamVersion.tgz" outputs/dsh-minecraft-stream.tgz
           node scripts/check_package.mjs outputs/minecraft-native-mcp.tgz outputs/dsh-minecraft-stream.tgz
           if ($LASTEXITCODE -ne 0) { throw 'Package verification failed' }
           Copy-Item CHANGELOG.md outputs/release.md
