@@ -9,7 +9,7 @@
 **Tech:** Node22.16+, Windows PowerShell for portable archive extraction, Java21 runtime, Fabric1.21 matrix; existing vanilla HTML/CSS dashboard.
 
 
-**Status:** Implementation and independent review completed. All12 versions compile and pass the real-game and optional HUD smoke. Fresh-workspace package installation and cached relaunch passed. Final tagged delivery and the preserved personal session are being completed; release status is recorded in GitHub Releases.
+**Status:** Implementation and independent review completed. All12 versions compile and pass the real-game and optional HUD smoke. Fresh-workspace package installation and cached relaunch passed. Tag v0.3.0 passed the 12-version build/package/publish workflow and was installed in the desktop profile; the preserved personal session is ready and frozen. The user's 20-minute private-stream acceptance remains pending.
 
 ## Constraints and review focus
 
@@ -62,5 +62,5 @@ Files: scripts/smoke_game.mjs, tests, README.md, docs/architecture.md, docs/stre
 - [x] Run a minimal real game smoke per version: launch, identity/survival, bridge, spatial scan, actual movement/action, screenshot, pause/freeze, graceful stop; use disposable worlds.
 - [x] Validate first install from release-shaped artifacts in a fresh workspace without compiling or requiring developer tools, force portableJava download, test error recovery and a subsequent cached launch. Existing DSH/game installation and assets are reused; this is not a clean-Windows test.
 - [x] Package base and optional streaming extension; scan public artifacts for private files/secrets and verify contents.
-- [ ] Update support evidence, user prerequisites, default workflow, troubleshooting and rollback. Publish only verified artifacts, install locally, restore original frozen session.
-- [ ] Remove temporary profiles/worlds/download failures and one-off test scaffolding; retain reproducible smoke and narrowly useful regression tests.
+- [x] Update support evidence, user prerequisites, default workflow, troubleshooting and rollback. Publish only verified artifacts, install locally, restore original frozen session.
+- [x] Remove temporary profiles/worlds/download failures and one-off test scaffolding; retain reproducible smoke and narrowly useful regression tests.
