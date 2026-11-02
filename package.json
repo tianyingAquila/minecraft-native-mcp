@@ -1,6 +1,6 @@
 {
   "name": "minecraft-native-mcp",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -51,6 +51,7 @@
     "LICENSE",
     "THIRD_PARTY.md",
     "versions.json",
+    "fabric-lock.json",
     "bundled",
     "artifacts/helpers",
     "CHANGELOG.md"

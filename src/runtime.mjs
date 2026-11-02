@@ -132,7 +132,7 @@ export class Runtime {
         this.store.reason = e.message;
         await this.minecraft.freeze().catch(() => {});
         await this.mcp.close();
-        this.store.event(e.message);
+        this.store.event(e.message+(e.code?.startsWith('FABRIC_')&&e.detail?'：'+e.detail:''));
         throw e;
       } finally {
         this.busy = false;

@@ -9,6 +9,7 @@ import {VERSION_MATRIX,chooseGame,findInstalledGames,readPrepared,versionEntry} 
 import {SetupError} from './setup-state.mjs';
 import {downloadVerified,verifiedFile,runOwned} from './downloads.mjs';
 import {readDeepSeekKey} from './deepseek.mjs';
+import {resolveFabricMetadata} from './fabric-metadata.mjs';
 const execute=promisify(execFile);
 const readJson=file=>JSON.parse(fs.readFileSync(file,'utf8').trimStart());
 const writeJson=(file,value)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(value,null,2)+'\n');};
@@ -99,11 +100,10 @@ export async function prepareGameEnvironment(settings,{root=ROOT,signal,onProgre
   else await pull(entry[key],path.join(mods,name),'mods','模组 '+name);
  }
  for(const [kind,into] of [['client',path.join(mods,'fish-client.jar')],['server',path.join(versionRoot,'fish-pause-server.jar')]]){const from=path.join(root,'artifacts/helpers',helpers[kind].path);if(!await verifiedFile(from,helpers[kind].sha256))throw new SetupError('HELPER_HASH','mods','预构建模组文件校验失败',kind,'请重新安装完整发布包。');await fs.promises.copyFile(from,into);}
- const profileUrl='https://meta.fabricmc.net/v2/versions/loader/'+game.version+'/'+VERSION_MATRIX.loader+'/profile/json';let profile;
- try{const response=await fetch(profileUrl,{signal:combined});if(!response.ok)throw Error('HTTP '+response.status);profile=await response.json();}catch(e){if(signal?.aborted)throw signal.reason;throw new SetupError('FABRIC_PROFILE','mods','无法读取 Fabric 启动配置',e.message,'检查能否访问 meta.fabricmc.net，然后重试。');}
- const fabricLibraries=[];for(const lib of profile.libraries){const [group,name,version]=lib.name.split(':'),relative=group.replaceAll('.','/')+'/'+name+'/'+version+'/'+name+'-'+version+'.jar',target=path.join(librariesRoot,relative),url=lib.url.replace(/\/$/,'')+'/'+relative;
-  let hash;try{const r=await fetch(url+'.sha1',{signal:combined});if(!r.ok)throw Error('HTTP '+r.status);hash=(await r.text()).trim().split(/\s/)[0];if(!/^[0-9a-f]{40}$/i.test(hash))throw Error('无有效校验值');}catch(e){if(signal?.aborted)throw signal.reason;throw new SetupError('FABRIC_LIBRARY','mods','无法核验 Fabric 运行库',name+'：'+e.message,'检查下载网络后重试。');}
-  await pull({url,hash,algorithm:'sha1'},target,'mods','Fabric 运行库 '+name);fabricLibraries.push(target);}
+ const fabric=await resolveFabricMetadata({root,version:game.version,loader:VERSION_MATRIX.loader,signal,onProgress:p=>onProgress('mods',p)}),profile=fabric.profile;
+ const fabricLibraries=[];for(const lib of fabric.libraries){const target=path.join(librariesRoot,lib.relative);
+  await pull({url:lib.url,hash:lib.sha1,algorithm:'sha1'},target,'mods','Fabric 运行库 '+lib.name.split(':')[1]);fabricLibraries.push(target);}
+ onProgress('mods',{message:'已确认 Fabric 配置和运行库（'+({bundled:'插件内置清单',cache:'本地缓存',network:'本次补取清单'})[fabric.source]+'；文件已校验）'});
  onProgress('profiles',{message:fs.existsSync(path.join(versionRoot,'client-launch.json'))?'确认并更新已有启动配置，复用原目录和存档':'创建首次启动配置，之后复用此目录'});
  const configFile=path.join(gameDir,'config/mcpfabric.config.json');let config={};try{config=readJson(configFile);}catch{}
  config={...config,host:'127.0.0.1',port:settings.mcpPort||25587,requireAuth:true,enableWorldWrite:false,enableCommands:false,enablePlayerControl:true,enableVision:true,enableUiControl:false,enableSupervisedControl:false,token:config.token||randomUUID().replaceAll('-',''),worldIdKey:config.worldIdKey||randomUUID().replaceAll('-','')};writeJson(configFile,config);

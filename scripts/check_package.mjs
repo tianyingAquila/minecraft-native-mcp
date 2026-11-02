@@ -2,8 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import zlib from 'node:zlib';
+import {validateFabricMetadata} from '../src/fabric-metadata.mjs';
 const matrix=JSON.parse(fs.readFileSync('versions.json')),manifest=JSON.parse(fs.readFileSync('artifacts/helpers/manifest.json'));
 if(matrix.versions.length!==12)throw Error('Incomplete 1.21 version matrix');
+const fabric=JSON.parse(fs.readFileSync('fabric-lock.json','utf8'));for(const version of matrix.versions)validateFabricMetadata(fabric.versions?.[version.id],version.id,matrix.loader);
 for(const version of matrix.versions){const row=manifest.versions[version.id];if(!row?.compiled||!row.cooking||!version.dataPackVersion?.major)throw Error('Unbuilt version or missing cooking index '+version.id);for(const entry of Object.values(row).filter(x=>x&&typeof x==='object'&&x.path)){const file=path.join('artifacts/helpers',entry.path);if(createHash('sha256').update(fs.readFileSync(file)).digest('hex')!==entry.sha256)throw Error('Wrong helper checksum '+entry.path);}}
 for(const file of ['bundled/mcpfabric/LICENSE','bundled/mcpfabric/dist/agent/runtime.js','bundled/mcpfabric/dist/agent/tools.js','src/game-setup.mjs'])if(!fs.existsSync(file))throw Error('Missing runtime file '+file);
 for(const archive of process.argv.slice(2)){

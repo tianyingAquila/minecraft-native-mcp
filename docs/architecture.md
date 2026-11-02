@@ -53,6 +53,8 @@ npm pack --pack-destination outputs
 
 `scripts/build_helpers.py`按版本生成兼容源并编译，Java构建产物位于artifacts/helpers，受Git忽略、由发布包携带。`scripts/bundle_runtime.mjs`从固定上游已编译dist生成随包JS副本；更新该副本前在上游mcp-server中使用仓库锁文件完成npm ci/build，保留MIT声明。
 
+Fabric启动清单和Maven SHA1锁定在fabric-lock.json，按完整游戏/加载器版本校验，与发布包一起提供；更新versions.json的加载器或版本集合时运行 `node scripts/update_fabric_lock.mjs` 从官方接口重新生成，check_package会检查全部12版本。准备优先读取内置清单，再读runtime/versions/<版本>/fabric-metadata-<加载器>.json缓存，最后才联网补取；补取单次15秒、最多3次、可取消，全部校验值取得后才原子写缓存。二进制仍由downloadVerified逐一校验，不因使用内置清单而跳过完整性检查。
+
 ```powershell
 node scripts/smoke_game.mjs --version 1.21.4 --minecraft-home D:/Games/.minecraft/versions/1.21.4/1.21.4.jar
 ```

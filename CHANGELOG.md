@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.4
+
+- Bundle official Fabric launch profiles and library checksums for all12 supported game versions, removing metadata-network requests from normal preparation.
+- Cache fallback metadata by game and loader version, validate its integrity and contents, and publish it atomically only after all checksums have been obtained.
+- Bound fallback requests to15seconds and at most3attempts, with cancellable retries and specific failure details retained in controller events.
+- Keep binary downloads hash-checked and reuse complete local files; missing files still require network access.
+
 ## 0.3.3
 
 - Add named worlds with version selection and optional seeds; create, select and delete through the dashboard after stopping the game.
