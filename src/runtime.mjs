@@ -12,6 +12,8 @@ import { DATA,saveSettings } from "./config.mjs";
 import {prepareEnvironment,inspectEnvironment} from './environment.mjs';
 import {checkGamePorts} from './ports.mjs';
 import {SetupError} from './setup-state.mjs';
+import {createWorld,listWorlds,selectWorldInfo,worldInfo,saveWorldSession,readWorldSession,trashWorld} from './worlds.mjs';
+import {gameWorldName} from './versions.mjs';
 export class Runtime {
   constructor() {
     this.store = new Store();
@@ -143,6 +145,40 @@ export class Runtime {
     }
   }
   async checkEnvironment(){const report=await inspectEnvironment(this.store.settings);this.store.environment=report;return report;}
+  worldList(){return {worlds:listWorlds(this.store.settings),selected:gameWorldName(this.store.settings)};}
+  assertWorldChange(){
+    if(this.busy||this.startTask||this.pauseTask||this.agent.task&&this.store.status==='running'||this.minecraft.child?.exitCode===null||this.observer.running())throw Error('请先点“保存并停止”，再新建或切换世界。');
+  }
+  selectWorld(id,version,{savePrevious=true}={}){
+    this.assertWorldChange();
+    const info=selectWorldInfo(id,version,this.store.settings);
+    if(this.store.persist&&savePrevious)saveWorldSession(this.store.settings,this.store);
+    this.store.settings={...this.store.settings,world:info.id,minecraftVersion:info.version,resolvedVersion:info.version};
+    if(this.store.persist)saveSettings(this.store.settings);
+    this.agent.load();this.agent.seenDiscoveries.clear();this.agent.currentSnapshot=null;
+    const saved=readWorldSession(this.store.settings);
+    Object.assign(this.store,{status:'stopped',goal:saved.goal||'准备踏上击杀末影龙的旅程',runningMs:Number(saved.runningMs)||0,startedAt:null,health:null,hunger:null,position:null,inventory:[],deaths:Number(saved.deaths)||0,usage:saved.usage||{prompt:0,completion:0,cached:0},spatial:null,connected:false,tools:0,calls:0,lastRequest:null,performance:{},commentary:null,reaction:null,reply:null});
+    this.store.setup.reset();this.store.environment=null;this.vision?.clear();
+    this.store.reason='已选择“'+info.name+'”，点击准备游戏'+(info.generated?'继续存档。':'生成新地图。');
+    this.store.event(this.store.reason);return info;
+  }
+  createWorld(input){this.assertWorldChange();const row=createWorld(input);return this.selectWorld(row.id,row.version);}
+  async deleteWorld(id,version){
+    this.assertWorldChange();const info=selectWorldInfo(id,version,this.store.settings);
+    const current=id===this.store.settings.world&&version===(this.store.settings.resolvedVersion||'1.21.4');
+    const remaining=listWorlds(this.store.settings).filter(w=>w.id!==id||w.version!==version);
+    this.busy=true;
+    try{await trashWorld(info);}finally{this.busy=false;}
+    if(current){const fallback=remaining[0]||{id:'rehearsal',version};if(!remaining.length)this.store.settings={...this.store.settings,world:fallback.id,resolvedVersion:fallback.version};this.selectWorld(fallback.id,fallback.version,{savePrevious:false});}
+    this.store.reason='“'+info.name+'”及其AI记忆、寻路缓存已移到回收站。';this.store.event(this.store.reason);
+  }
+  configure(patch){
+    // Worlds switch through their own lifecycle, so a settings save cannot silently redirect a running game or memory.
+    if(patch.world!==undefined&&patch.world!==this.store.settings.world)throw Error('请使用世界列表中的“切换世界”。');
+    const info=worldInfo(this.store.settings);
+    if(info.id.startsWith('world-')&&patch.minecraftVersion!==undefined&&patch.minecraftVersion!==info.version)throw Error('这个存档使用 Java '+info.version+'；其他版本请新建一个世界。');
+    this.store.configure(patch);
+  }
   async start(options = {}) {
     if (this.startTask) return this.startTask;
     this.startTask = this.startInner(options);

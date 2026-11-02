@@ -16,6 +16,8 @@ The environment checklist shows what is ready, what will be installed automatica
 
 Default runtime120minutes; regeneration I, resistance I, night vision I and keepInventory are declared to the model. Pause freezes and saves; stop closes the game. The official API balance guard retains CNY1. The dashboard uses its own model configuration rather than inheriting the active DSH chat model.
 
+Use **New world** in the world manager to name a world, choose its Minecraft version and optionally supply a seed, then prepare the game. Stop the game before creating, switching or deleting worlds. Each world has separate game data and AI memory; new worlds also isolate client identity and navigation caches while reusing shared game files and libraries. Deletion requires confirmation and moves the selected world, AI memory and dedicated cache to the Windows Recycle Bin with restoration instructions. Existing backups are retained.
+
 ## Optional streaming
 
 ```powershell
@@ -28,7 +30,7 @@ Pause and click the separate **直播扩展** button. Whale/action/reaction/bala
 
 After preparation, configure `node /absolute/path/src/mcp-server.mjs --launch` in any stdio MCP client. This launches the game without autonomous model requests or a DeepSeek key requirement. Requires Node22.16+. Without `--launch`, set `FISH_BRIDGE_CONFIG` to an existing local authenticated bridge configuration; exiting releases actions without stopping the external game. Do not run competing controllers.
 
-Spatial summaries cover16 blocks horizontally and±12 vertically; candidates are conservative geometry estimates rather than navigation guarantees. `inspect_space` supplies layered slices. `dig_tunnel` advances1–12 steps, at most90seconds, with hazard interruption. Diagnostic game-frame screenshots have a30second cooldown.
+Spatial summaries cover16 blocks horizontally and±12 vertically; candidates are conservative geometry estimates rather than navigation guarantees. `inspect_space` supplies layered slices. `dig_tunnel` advances1–12 steps, at most90seconds, with hazard interruption. The autonomous prompt favors surface exploration and structure-based resource opportunities. On-demand game screenshots support distant scenery/structure observation and diagnostics, with a15second cooldown and no hourly cap; they are not taken automatically on a timer.
 
 Workspace: `$DSH_HOME/minecraft-native-mcp`. Worlds and memory are version-isolated; legacy1.21.4 paths are preserved. Managed-source upgrades back up code and retain data/runtime; custom projectDirectory locations require manual source updates. DSH dependencies are reused through workspace directory links. No system service, startup task, global PATH or administrator installation is added.
 

@@ -43,4 +43,5 @@ export function chooseGame(games,settings){
   return matches.find(g=>g.origin==='selected')||matches.find(g=>g.version===settings.resolvedVersion)||matches[0]||null;
 }
 export function readPrepared(root=ROOT){try{return JSON.parse(fs.readFileSync(path.join(root,'runtime/prepared.json'),'utf8'));}catch{return null;}}
-export function gameWorldName(settings){const v=settings.resolvedVersion||'1.21.4';return settings.world+(v==='1.21.4'?'':'-'+v);}
+export function validateWorldId(id){if(typeof id!=='string'||!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id))throw Error('世界标识无效，请在控制台选择或新建世界。');return id;}
+export function gameWorldName(settings){const v=settings.resolvedVersion||'1.21.4';versionEntry(v);return validateWorldId(settings.world)+(v==='1.21.4'?'':'-'+v);}

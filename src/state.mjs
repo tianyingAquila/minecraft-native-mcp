@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DATA, FIXED_NOTE, readSettings, saveSettings } from "./config.mjs";
 import {SetupState} from './setup-state.mjs';
-import {SUPPORTED_VERSIONS} from './versions.mjs';
+import {SUPPORTED_VERSIONS,validateWorldId} from './versions.mjs';
 export class Store {
   constructor({ persist = true } = {}) {
     this.persist = persist;
@@ -112,9 +112,7 @@ export class Store {
       this.settings.durationMinutes = n;
     }
     if (patch.world !== undefined) {
-      if (!["rehearsal", "live"].includes(patch.world))
-        throw new Error("世界选择无效。");
-      this.settings.world = patch.world;
+      this.settings.world = validateWorldId(patch.world);
     }
     saveSettings(this.settings);
     this.save();

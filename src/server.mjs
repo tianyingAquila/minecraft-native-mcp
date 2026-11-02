@@ -54,6 +54,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/state")
       return json(res, 200, runtime.store.publicState());
     if (url.pathname === '/api/environment')return json(res,200,await runtime.checkEnvironment());
+    if (url.pathname === '/api/worlds')return json(res,200,runtime.worldList());
     if (url.pathname === "/api/overlay") {
       return json(res, 200, {
         ...runtime.store.overlayState(),
@@ -90,7 +91,16 @@ const server = http.createServer(async (req, res) => {
             runtime.minecraft.child?.exitCode === null
           )
             throw new Error("切换世界前请先保存并停止。");
-          runtime.store.configure(value.settings || {});
+          runtime.configure(value.settings || {});
+          break;
+        case 'create_world':
+          runtime.createWorld({name:value.name,version:value.version,seed:value.seed||''});
+          break;
+        case 'select_world':
+          runtime.selectWorld(value.world,value.version);
+          break;
+        case 'delete_world':
+          await runtime.deleteWorld(value.world,value.version);
           break;
         case "balance":
           await runtime.refreshBalance();

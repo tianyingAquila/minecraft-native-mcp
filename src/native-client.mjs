@@ -5,7 +5,23 @@ import { ROOT, DATA, PORT } from "./config.mjs";
 import { stopChildTree } from "./minecraft.mjs";
 import { ClientBridge } from "./client-bridge.mjs";
 import {readPrepared} from './versions.mjs';
+import {gameWorldName} from './versions.mjs';
+import {randomUUID} from 'node:crypto';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+export function worldClientDirectory(settings,prepared,{data=DATA}={}){
+  const base=prepared?.gameDir||path.join(data,'native-client');
+  if(!settings.world.startsWith('world-'))return base;
+  const directory=path.join(data,'world-clients',gameWorldName(settings));
+  fs.mkdirSync(path.join(directory,'config'),{recursive:true});
+  fs.mkdirSync(path.join(directory,'mods'),{recursive:true});
+  for(const name of fs.readdirSync(path.join(base,'mods'))){if(name.endsWith('.jar'))fs.copyFileSync(path.join(base,'mods',name),path.join(directory,'mods',name));}
+  const configFile=path.join(directory,'config/mcpfabric.config.json');
+  const source=JSON.parse(fs.readFileSync(prepared?.configFile||path.join(base,'config/mcpfabric.config.json'),'utf8'));
+  let worldIdKey=randomUUID().replaceAll('-','');try{worldIdKey=JSON.parse(fs.readFileSync(configFile,'utf8')).worldIdKey||worldIdKey;}catch{}
+  fs.writeFileSync(configFile,JSON.stringify({...source,worldIdKey},null,2));
+  const options=path.join(base,'options.txt');if(!fs.existsSync(path.join(directory,'options.txt'))&&fs.existsSync(options))fs.copyFileSync(options,path.join(directory,'options.txt'));
+  return directory;
+}
 export class NativeClient {
   constructor({onDisconnect = () => {}} = {}) {
     this.onDisconnect = onDisconnect;
@@ -41,10 +57,7 @@ export class NativeClient {
     // Launch profiles are generated per workspace; do not reuse another workspace's game directory.
     const ownedArgs = [...args];
     ownedArgs.unshift(`-Dfishlive.controlUrl=${process.env.FISH_OVERLAY_URL||'http://127.0.0.1:'+PORT+'/api/overlay'}`);
-    ownedArgs[ownedArgs.indexOf("--gameDir") + 1] = prepared?.gameDir||path.join(
-      DATA,
-      "native-client",
-    );
+    ownedArgs[ownedArgs.indexOf("--gameDir") + 1] = worldClientDirectory(settings,prepared);
     fs.mkdirSync(path.join(ROOT, "logs"), { recursive: true });
     const log = fs.createWriteStream(
       path.join(ROOT, "logs/native-client.log"),

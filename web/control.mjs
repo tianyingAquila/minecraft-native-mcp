@@ -2,9 +2,9 @@ const $ = (id) => document.getElementById(id);
 let pending = false,
   settingsLoaded = false;
 let latestState=null,lastErrorShown='',checkBusy=false,directoryBusy=false;
-let setupCollapsed=false,previousStatus='';
+let setupCollapsed=false,previousStatus='',worldRows=[],worldKey='',worldBusy=false,worldToDelete=null;
 const escape=(text)=>String(text??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-function currentSettings(){return {durationMinutes:Number($('duration').value),world:$('world-select').value,minecraftHome:$('minecraft-home').value,minecraftVersion:$('minecraft-version').value,nativeHudEnabled:$('native-hud').checked};}
+function currentSettings(){return {durationMinutes:Number($('duration').value),minecraftHome:$('minecraft-home').value,minecraftVersion:$('minecraft-version').value,nativeHudEnabled:$('native-hud').checked};}
 const names = {
   idle: "尚未开始",
   preparing: "正在准备",
@@ -61,8 +61,7 @@ function render(s) {
   $("status").className = "status " + s.status;
   $("goal").textContent = s.goal;
   $("reason").textContent = s.reason || "大肥鱼正在自己决定下一步。";
-  $("world").textContent =
-    s.settings.world === "live" ? "正式世界" : "排练世界";
+  renderWorldControls(s);
   $("remaining").textContent = clock(s.remainingMs);
   $("balance").textContent = s.balance
     ? "¥" + Number(s.balance.total).toFixed(2)
@@ -99,7 +98,6 @@ function render(s) {
   $("start").textContent = s.status === "paused" ? "继续冒险" : "开始冒险";
   if (!settingsLoaded) {
     $("duration").value = s.settings.durationMinutes;
-    $("world-select").value = s.settings.world;
     $("native-hud").checked = s.settings.nativeHudEnabled !== false;
     $('minecraft-home').value=s.settings.minecraftHome||'';
     const option=document.createElement('option');option.value=s.settings.minecraftVersion||'auto';option.textContent=option.value;
@@ -109,6 +107,7 @@ function render(s) {
   }
   for (const el of $("settings").elements)
     el.disabled = ["running", "preparing", "pausing"].includes(s.status);
+  if(s.settings.world.startsWith('world-'))$('minecraft-version').disabled=true;
   $('cancel-prepare').disabled=s.status!=='preparing';
   $("events").replaceChildren(
     ...s.events
@@ -146,8 +145,53 @@ $("settings").addEventListener("submit", (e) => {
 $('disable-streaming').onclick=()=>command('settings',{settings:{streamingEnabled:false,nativeHudEnabled:false}});
 $("overlay-url").textContent = location.origin + "/overlay?key=green";
 await refresh();
+await refreshWorlds();
 void checkEnvironment(false);
 setInterval(refresh, 1000);
+
+function renderWorldControls(s){
+ const key=s.settings.world+'@'+(s.settings.resolvedVersion||'1.21.4');
+ if(worldKey&&worldKey!==key){settingsLoaded=false;$('world-select').value=key;void refreshWorlds();}
+ worldKey=key;
+ const current=worldRows.find(w=>w.id+'@'+w.version===key);
+ $('world').textContent=current?.name||({rehearsal:'排练世界',live:'正式世界'})[s.settings.world]||'当前世界';
+ $('world-current').textContent='当前：'+$('world').textContent+' · Java '+(s.settings.resolvedVersion||'1.21.4');
+ const locked=!['idle','stopped','error'].includes(s.status)||s.setup?.running||worldBusy;
+ $('new-world').disabled=locked;$('world-select').disabled=locked;$('switch-world').disabled=locked||$('world-select').value===key;
+ $('delete-world').disabled=locked||!worldRows.find(w=>w.id+'@'+w.version===$('world-select').value)?.deletable;
+ $('world-help').textContent=locked?'请先点“保存并停止”，再新建或切换。现有存档会保留。':'选中存档后点“切换世界”，再准备游戏；各世界的背包、地形和AI记忆分别保存。';
+}
+async function refreshWorlds(){
+ try{const r=await fetch('/api/worlds',{cache:'no-store'}),d=await r.json();if(!r.ok)throw Error(d.error);
+  const selected=$('world-select').value;worldRows=d.worlds;
+  $('world-select').replaceChildren(...worldRows.map(w=>{const o=document.createElement('option');o.value=w.id+'@'+w.version;o.textContent=w.name+' · Java '+w.version+(w.generated?'':' · 待首次准备');return o;}));
+  $('world-select').value=worldRows.some(w=>w.id+'@'+w.version===selected)?selected:worldKey;
+  if(latestState)renderWorldControls(latestState);
+ }catch(e){$('world-help').textContent='存档列表读取失败：'+e.message;}
+}
+$('world-select').onchange=()=>{if(latestState)renderWorldControls(latestState);};
+$('switch-world').onclick=async()=>{
+ const row=worldRows.find(w=>w.id+'@'+w.version===$('world-select').value);if(!row)return;
+ await worldCommand('select_world',{world:row.id,version:row.version});
+};
+$('new-world').onclick=()=>{
+ const versions=latestState?.environment?.versions||[];
+ $('world-version').replaceChildren(...(versions.length?versions:[{id:latestState.settings.resolvedVersion||'1.21.4'}]).map(v=>{const o=document.createElement('option');o.value=v.id;o.textContent='Java '+v.id;return o;}));
+ $('world-version').value=latestState.settings.resolvedVersion||'1.21.4';
+ $('new-world-form').reset();$('world-version').value=latestState.settings.resolvedVersion||'1.21.4';$('world-error').textContent='';$('world-dialog').showModal();$('world-name').focus();
+};
+$('cancel-world').onclick=()=>$('world-dialog').close();
+$('delete-world').onclick=()=>{worldToDelete=worldRows.find(w=>w.id+'@'+w.version===$('world-select').value);if(!worldToDelete)return;$('delete-world-name').textContent='“'+worldToDelete.name+'” · Java '+worldToDelete.version;$('delete-world-dialog').showModal();};
+$('cancel-delete-world').onclick=()=>$('delete-world-dialog').close();
+$('confirm-delete-world').onclick=async()=>{if(worldToDelete)await worldCommand('delete_world',{world:worldToDelete.id,version:worldToDelete.version});};
+$('new-world-form').onsubmit=async e=>{e.preventDefault();await worldCommand('create_world',{name:$('world-name').value,version:$('world-version').value,seed:$('world-seed').value});};
+async function worldCommand(action,payload){
+ if(worldBusy||pending)return;worldBusy=true;$('create-world').disabled=true;$('confirm-delete-world').disabled=true;
+ try{const r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...payload})}),d=await r.json();if(!r.ok)throw Error(d.error);
+  settingsLoaded=false;$('world-dialog').close();$('delete-world-dialog').close();$('notice').textContent=d.state.reason;await refresh();await refreshWorlds();await checkEnvironment(false);
+ }catch(e){$('world-error').textContent=e.message;$('notice').textContent=e.message;}
+ finally{worldBusy=false;$('create-world').disabled=false;$('confirm-delete-world').disabled=false;if(latestState)renderWorldControls(latestState);}
+}
 
 function renderPreparation(s){
  const setup=s.setup,env=s.environment,busy=['preparing','running','pausing'].includes(s.status);
@@ -162,7 +206,9 @@ function renderPreparation(s){
   if([...$('minecraft-version').options].some(x=>x.value===selected))$('minecraft-version').value=selected;
   $('environment-checks').innerHTML=env.checks.map(c=>`<li class="check ${escape(c.state)}"><span class="check-symbol" aria-hidden="true">${c.state==='ready'?'✓':c.state==='installable'?'↓':'!'}</span><div><strong>${escape(c.title)}</strong><p>${escape(c.detail)}</p>${c.state==='missing'||c.state==='failed'?'<small>'+escape(c.hint)+'</small>':''}</div><span class="check-label">${({ready:'已就绪',installable:'自动准备',missing:'需要处理',failed:'不兼容'})[c.state]||c.state}</span></li>`).join('');
   $('setup-summary').textContent=env.selectedVersion?'将使用 Minecraft Java '+env.selectedVersion+'；其他版本使用独立世界。':'先安装游戏或选择已有文件夹，然后点准备游戏。';
-  const unique=[...new Set(env.games.map(g=>g.version))];$('detected-games').replaceChildren(...unique.map(v=>{const b=document.createElement('button');b.type='button';b.className='game-chip';b.textContent='已找到 '+v;b.disabled=busy;b.onclick=()=>{$('minecraft-version').value=v;};return b;}));
+  const unique=[...new Set(env.games.map(g=>g.version))];$('detected-games').replaceChildren(...unique.map(v=>{const b=document.createElement('button');b.type='button';b.className='game-chip';b.textContent='已找到 '+v;b.disabled=busy||s.settings.world.startsWith('world-')&&v!==s.settings.resolvedVersion;b.onclick=()=>{$('minecraft-version').value=v;};return b;}));
+ }else{
+  $('environment-checks').innerHTML='<li>请重新检查当前世界对应的游戏环境。</li>';$('detected-games').replaceChildren();$('setup-summary').textContent='将核对当前世界对应的游戏版本。';
  }
  if(!setup)return;
  const hasProgress=setup.steps.some(row=>row.state!=='pending');$('setup-progress').hidden=!hasProgress;
@@ -190,4 +236,4 @@ $('choose-directory').onclick=async()=>{if(directoryBusy)return;directoryBusy=tr
 function focusDirectory(){$('error-dialog').close();$('settings').scrollIntoView({behavior:'smooth',block:'center'});$('minecraft-home').focus();}
 $('fix-directory').onclick=focusDirectory;$('dialog-directory').onclick=focusDirectory;
 $('retry-setup').onclick=()=>command('prepare');$('dialog-retry').onclick=()=>{$('error-dialog').close();void command('prepare');};$('dialog-dismiss').onclick=()=>$('error-dialog').close();
-$('copy-diagnostics').onclick=async()=>{const s=latestState;const text=JSON.stringify({version:'0.3.2',status:s.status,game:s.settings.resolvedVersion||s.settings.minecraftVersion,environment:s.environment,setup:s.setup,events:s.events.slice(-8)},null,2);try{await navigator.clipboard.writeText(text);$('notice').textContent='诊断信息已复制，可发给维护者排查。';}catch{$('problem-detail').textContent=text;$('problem-detail').parentElement.open=true;}};
+$('copy-diagnostics').onclick=async()=>{const s=latestState;const text=JSON.stringify({version:'0.3.3',status:s.status,game:s.settings.resolvedVersion||s.settings.minecraftVersion,environment:s.environment,setup:s.setup,events:s.events.slice(-8)},null,2);try{await navigator.clipboard.writeText(text);$('notice').textContent='诊断信息已复制，可发给维护者排查。';}catch{$('problem-detail').textContent=text;$('problem-detail').parentElement.open=true;}};

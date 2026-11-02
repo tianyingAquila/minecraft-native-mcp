@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.3
+
+- Add named worlds with version selection and optional seeds; create, select and delete through the dashboard after stopping the game.
+- Preserve legacy saves and isolate each world's game state, AI memory, client identity and navigation cache without copying the game or libraries.
+- Confirm deletions by world name and move the selected save, AI memory and dedicated cache to the Windows Recycle Bin with recovery instructions; retain existing backups.
+- Prefer purposeful surface exploration and structure-based resource gathering in the autonomous prompt.
+- Allow screenshots for exploration as well as diagnosis; reduce the successful-capture cooldown from30to15seconds with no hourly cap.
+
 ## 0.3.2
 
 - Make pathfinding turn the visible first-person camera toward the path, including turns, with native smoothing.

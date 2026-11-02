@@ -1,20 +1,20 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { ServiceError } from "./deepseek.mjs";
-export const VISION_COOLDOWN_MS = 30000;
+export const VISION_COOLDOWN_MS = 15000;
 export const VISION_TOOL = {
   type: "function",
   function: {
     name: "inspect_game_screen",
     description:
-      `仅在对游戏状态明显困惑、动作莫名失败、无端卡住或界面异常且数据查询不能解释时，截取一张当前 Minecraft 游戏画面诊断。说明具体游戏问题。不要例行截图；成功截图至少间隔${VISION_COOLDOWN_MS / 1000}秒，无每小时张数限制。截图后先观察图片再决定下一步；危急时优先脱险，不为截图拖延。`,
+      `截取一张当前 Minecraft 游戏画面，可在探索时主动观察远处地形、疑似建筑和路线，也可诊断明显困惑、动作莫名失败、卡住或界面异常。说明具体观察目的或问题；不必等到失败才使用，但不要无目的刷图。成功截图至少间隔${VISION_COOLDOWN_MS / 1000}秒，无每小时张数限制。先观察图片再决定下一步；危急时优先脱险。`,
     parameters: {
       type: "object",
       properties: {
         reason: { type: "string", minLength: 10, maxLength: 240 },
         symptom: {
           type: "string",
-          enum: ["confused", "unexpected_failure", "stuck", "ui_problem"],
+          enum: ["exploration", "confused", "unexpected_failure", "stuck", "ui_problem"],
         },
       },
       required: ["reason", "symptom"],
@@ -74,7 +74,7 @@ export class VisionDiagnostics {
       typeof args.reason !== "string" ||
       args.reason.trim().length < 10 ||
       args.reason.length > 240 ||
-      !["confused", "unexpected_failure", "stuck", "ui_problem"].includes(
+      !["exploration", "confused", "unexpected_failure", "stuck", "ui_problem"].includes(
         args.symptom,
       ) ||
       Object.keys(args).some((k) => !["reason", "symptom"].includes(k))

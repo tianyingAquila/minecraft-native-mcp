@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { ROOT, DATA } from "./config.mjs";
+import {gameWorldName} from './versions.mjs';
 import {
   fetchBalance,
   canSpend,
@@ -63,8 +64,7 @@ export class Agent {
     this.seenDiscoveries=new Set();
   }
   get sessionFile() {
-    const version=this.store.settings.resolvedVersion||'1.21.4';
-    return path.join(DATA, "agent-" + this.store.settings.world+(version==='1.21.4'?'':'-'+version) + ".json");
+    return path.join(DATA, "agent-" + gameWorldName(this.store.settings) + ".json");
   }
   load() {
     try {

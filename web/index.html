@@ -26,7 +26,7 @@
             <label>已有游戏文件夹<div class="directory-field"><input id="minecraft-home" placeholder="自动查找；也可选择第三方启动器的游戏目录" type="text" /><button id="choose-directory" type="button">选择文件夹</button></div></label>
             <p class="field-help">支持 Java1.21系列正式版。游戏本体需要先在你的启动器安装。</p>
             <div id="detected-games" class="detected-games"></div>
-            <div class="session-options"><label>每场时长<span><input id="duration" type="number" min="1" max="720" value="120" /> 分钟</span></label><label>游戏世界<select id="world-select"><option value="rehearsal">排练世界</option><option value="live">正式世界</option></select></label></div>
+            <div class="session-options"><label>每场时长<span><input id="duration" type="number" min="1" max="720" value="120" /> 分钟</span></label></div>
             <label class="stream-only" hidden><span><input id="native-hud" type="checkbox" /> 游戏内鲸鱼与气泡</span></label>
             <div class="actions"><button id="prepare" type="button" data-action="prepare" class="primary">准备游戏</button><button type="submit" class="secondary">保存设置</button><button id="cancel-prepare" type="button" data-action="pause" hidden>取消准备</button></div>
             <p id="setup-summary" class="field-help" role="status">正在检查本机环境…</p>
@@ -35,6 +35,11 @@
         </div>
         <div id="setup-progress" hidden aria-live="polite"><div class="progress-heading"><strong id="progress-title">正在准备</strong><span id="progress-time"></span></div><progress id="download-progress" max="100"></progress><p id="download-detail" class="field-help"></p><ol id="setup-steps" class="setup-steps"></ol></div>
         <section id="setup-problem" class="problem" hidden role="alert"><h3 id="problem-title"></h3><p id="problem-hint"></p><details><summary>查看具体原因</summary><pre id="problem-detail"></pre></details><div class="actions"><button id="retry-setup">重新准备</button><button id="fix-directory">检查游戏目录</button><button id="copy-diagnostics">复制诊断信息</button></div></section>
+      </section>
+      <section class="world-manager" aria-labelledby="worlds-title">
+        <div class="section-heading"><div><h2 id="worlds-title">我的世界存档</h2><p id="world-current">正在读取存档…</p></div><button id="new-world" type="button" class="secondary">＋ 新建世界</button></div>
+        <div class="world-picker"><label for="world-select">选择存档</label><select id="world-select" aria-describedby="world-help"></select><button id="switch-world" type="button">切换世界</button><button id="delete-world" type="button">删除…</button></div>
+        <p id="world-help" class="field-help">新建和切换前请保存并停止游戏。每个世界分别保存背包、地形和AI记忆。</p>
       </section>
       <div class="workspace">
         <section class="operation">
@@ -125,6 +130,16 @@
       </footer>
     </main>
     <dialog id="error-dialog" aria-labelledby="dialog-title"><form method="dialog"><button class="dialog-close" aria-label="关闭提示">×</button></form><h2 id="dialog-title">准备没有完成</h2><p id="dialog-hint"></p><p id="dialog-step" class="field-help"></p><div class="actions"><button id="dialog-retry" class="primary">重新准备</button><button id="dialog-directory">检查游戏目录</button><button id="dialog-dismiss">知道了</button></div></dialog>
+    <dialog id="world-dialog" aria-labelledby="world-dialog-title">
+      <form id="new-world-form"><h2 id="world-dialog-title">新建生存世界</h2>
+        <label>世界名称<input id="world-name" required maxlength="40" placeholder="例如：第一次正式冒险" autocomplete="off" /></label>
+        <label>游戏版本<select id="world-version"></select></label>
+        <label>世界种子（可选）<input id="world-seed" maxlength="128" placeholder="留空随机生成" autocomplete="off" /></label>
+        <p class="field-help">普通难度生存，沿用当前游戏保障。使用独立新存档，原有世界保留；创建后点“准备游戏”生成地图。</p>
+        <p id="world-error" role="alert"></p><div class="actions"><button id="create-world" class="primary" type="submit">创建并选中</button><button id="cancel-world" type="button">取消</button></div>
+      </form>
+    </dialog>
+    <dialog id="delete-world-dialog" aria-labelledby="delete-world-title"><h2 id="delete-world-title">删除这个世界？</h2><p id="delete-world-name"></p><p>这个世界的存档、AI记忆和专属寻路缓存会一起移入回收站。其他世界和已有备份保留。</p><p class="field-help">误删后可在回收站还原；目录里附有恢复说明。</p><div class="actions"><button id="confirm-delete-world" type="button">移到回收站</button><button id="cancel-delete-world" type="button">取消</button></div></dialog>
     <script type="module" src="/web/control.mjs"></script>
   </body>
 </html>

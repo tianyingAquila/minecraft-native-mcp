@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ROOT, DATA } from "./config.mjs";
 import {readPrepared,gameWorldName,versionEntry} from './versions.mjs';
+import {worldInfo} from './worlds.mjs';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function stopChildTree(child) {
   if (!child || child.exitCode !== null) return;
@@ -40,6 +41,7 @@ export function createWorldFiles(worldDir, settings) {
       "enable-rcon=false",
       "enable-query=false",
       "level-name=world",
+      ...(settings.worldSeed?['level-seed='+settings.worldSeed]:[]),
       "motd=DeepSeek Minecraft Live",
       "sync-chunk-writes=true",
       "enable-command-block=false",
@@ -114,7 +116,8 @@ export class Minecraft {
       throw new Error("缺少 Minecraft 服务端，请先运行准备环境。");
     this.world = this.store.settings.world;
     const cwd = path.join(DATA, "worlds", gameWorldName(this.store.settings));
-    createWorldFiles(cwd, this.store.settings);
+    const info=worldInfo(this.store.settings);
+    createWorldFiles(cwd, {...this.store.settings,worldSeed:info.seed});
     const nativeProfile = prepared?.serverProfile||path.join(ROOT, "runtime/native-server/launch.json");
     let javaArgs = [
       "-Xms512M",
@@ -197,7 +200,7 @@ export class Minecraft {
       this.command('gamerule '+(modern?'minecraft:keep_inventory':'keepInventory')+' true');
       this.command('gamerule '+(modern?'minecraft:send_command_feedback':'sendCommandFeedback')+' false');
       this.command('gamerule '+(modern?'minecraft:log_admin_commands':'logAdminCommands')+' false');
-      this.store.event("Minecraft " + this.world + " 世界已准备。");
+      this.store.event("Minecraft " + info.name + " 世界已准备。");
     } catch (e) {
       await stopChildTree(child);
       this.child = null;
