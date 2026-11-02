@@ -14,8 +14,9 @@ import { unwrap } from "./mcp.mjs";
 import { VISION_TOOL } from "./vision.mjs";
 import { ProgressGuard } from './progress.mjs';
 import {encodeObservation,requestUsage} from './observation.mjs';
-import {withCommentary,shortCommentary,actionCommentary,failureCommentary,actionFeedback,reactionAllowed,reactionEventKey} from './commentary.mjs';
+import {withCommentary,shortCommentary,actionCommentary,failureCommentary,actionFeedback,reactionAllowed,reactionEventKey,situationOf} from './commentary.mjs';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const PASSIVE=new Set(['wait_for_game','look_at','close_container','close_game_screen','set_goal','inspect_game_screen']);
 const localTools = [
   {
     type: "function",
@@ -62,6 +63,7 @@ export class Agent {
     this.feedback = null;
     this.reactedEvent = null;
     this.seenDiscoveries=new Set();
+    this.idleRounds=0;this.waitStreak=0;this.forceAction=false;this.recoveryNote=null;
   }
   get sessionFile() {
     return path.join(DATA, "agent-" + gameWorldName(this.store.settings) + ".json");
@@ -92,6 +94,8 @@ export class Agent {
     this.progress.reset();
     this.lastAction = null; this.feedback = null; this.reactedEvent = null;
     this.visionUnavailableRequests=0;
+    this.idleRounds=0;this.waitStreak=0;this.forceAction=false;this.recoveryNote=null;
+    this.emptyRounds=0;
     this.load();
     this.task = this.run(options).catch(async (e) => {
       if (e.name !== "AbortError") {
@@ -136,18 +140,20 @@ export class Agent {
       );
       const visionAvailable=this.runtime.vision?.availability();
       if(visionAvailable?.available)this.visionUnavailableRequests=0;
-      const tools = [
+      const requireAction=this.forceAction||this.emptyRounds>0||this.idleRounds>=2||this.waitStreak>=2||this.progress.advice().stalled;
+      let tools = [
         ...this.mcp.tools().map(t=>withCommentary(t,this.mcp.isReadOnly?.(t.function.name))),
         ...localTools,
         ...(this.runtime.vision && visionAvailable?.available!==false ? [VISION_TOOL] : []),
       ];
+      if(requireAction){const active=tools.filter(t=>t.function.name==='inspect_game_screen'||!PASSIVE.has(t.function.name)&&!this.mcp.isReadOnly?.(t.function.name));if(active.length)tools=active;}
       const current =
         "当前真实游戏状态：\n" +
         encodeObservation(snapshot) +
         '\n上一主要动作的真实反馈：'+JSON.stringify(this.feedback)+'\n当前是否适合轻量反应：'+reactionAllowed(this.feedback,snapshot)+
         "\n执行反馈（重复失败时必须先解决原因，不要重复开关同一容器）：" + JSON.stringify(this.progress.advice()) +
         "\n已保存游戏记忆：" +
-        this.notes + '\n截图当前可用情况：'+JSON.stringify(visionAvailable||{available:false});
+        this.notes + '\n截图当前可用情况：'+JSON.stringify(visionAvailable||{available:false})+'\n持续推进：'+JSON.stringify({requireAction,consecutiveWaits:this.waitStreak,passiveRounds:this.idleRounds,recovery:this.recoveryNote})+'；夜晚也请选择可推进的采集、制作、探索、睡觉或战斗任务，不连续原地等天亮。脚边实心与树冠不能证明封闭安全屋。';
       const image = this.runtime.vision?.peek();
       const observation = image
         ? [
@@ -181,7 +187,7 @@ export class Agent {
           { role: "user", content: observation },
         ],
         tools,
-        tool_choice: "auto",
+        tool_choice: requireAction&&tools.length ? "required" : "auto",
         max_tokens: this.store.settings.maxOutputTokens,
         thinking: { type: "disabled" },
         temperature: 0.7,
@@ -228,14 +234,9 @@ export class Agent {
       const calls = message.tool_calls || [];
       if (!calls.length) {
         this.emptyRounds++;
-        if (this.emptyRounds >= 4)
-          throw new ServiceError(
-            "NO_ACTION",
-            "模型连续没有选择游戏动作，已暂停等待检查。",
-          );
       } else this.emptyRounds = 0;
       let needsObservation = false,
-        majorActionTaken = false;
+        majorActionTaken = false,activeAttempted=false;
       for (const call of calls) {
         if (this.controller.signal.aborted) break;
         let output;
@@ -268,11 +269,13 @@ export class Agent {
           else {
             if (name === "inspect_game_screen") needsObservation = true;
             output = await this.execute(name, args, say, reaction);
+            if(!readOnly&&!PASSIVE.has(name)){activeAttempted=true;this.forceAction=false;}
             if (!readOnly && name !== "inspect_game_screen")
               majorActionTaken = true;
           }
         } catch (e) {
           output = {
+            state:this.controller.signal.aborted||e.name==='AbortError'?'cancelled':'failed',
             error: e.code || "ACTION_ERROR",
             message: e.message || "动作失败，请检查后重新规划。",
           };
@@ -296,10 +299,8 @@ export class Agent {
       this.history = compactHistory([...this.history, group]);
       this.save();
       this.store.save();
-      if (this.progress.shouldPause() || this.visionUnavailableRequests>=3) {
-        await this.runtime.pause('game_stuck','同一状态下反复失败或长时间没有实际进展，已保存暂停，请检查游戏执行情况。');
-        return;
-      }
+      this.idleRounds=activeAttempted?0:this.idleRounds+1;
+      if (this.progress.needsRecovery() || this.visionUnavailableRequests>=3 || this.emptyRounds>=3 || this.idleRounds>=4)await this.recoverActivity();
       round++;
       if (maxRounds && round >= maxRounds) {
         await this.runtime.pause(
@@ -330,7 +331,24 @@ export class Agent {
       this.save();
       return { saved: true };
     }
+    if(name==='wait_for_game'){
+      if(this.waitStreak>=2)return {state:'not_executed',error:'ACTIVE_TASK_REQUIRED',message:'已经连续短等两次。请选择真正可推进的任务，不继续等天亮或重复查询。'};
+      this.waitStreak++;
+    }else if(!this.mcp.isReadOnly?.(name)&&!PASSIVE.has(name))this.waitStreak=0;
     return this.gameAction(name, args, say, reaction);
+  }
+  async recoverActivity(){
+    this.controller.signal.throwIfAborted();if(this.store.status!=='running')return;
+    this.forceAction=true;this.emptyRounds=0;this.idleRounds=0;this.visionUnavailableRequests=0;this.progress.recoveryStarted();
+    this.store.event('正在主动诊断无进展状态；继续重新规划，不自动结束冒险。');
+    const pending=this.runtime.vision?.peek?.();if(pending){this.recoveryNote={awaitingScreenshot:pending.id};return;}
+    const s=situationOf(this.currentSnapshot),v=s.vitals||s,urgent=(v.health??20)<=10||s.position?.inLava||(v.airSupplyTicks??300)<100||s.nearby?.hostiles?.some(e=>e.distance<5);
+    if(this.runtime.vision?.availability?.()?.available&&!urgent){
+      try{this.recoveryNote=await this.runtime.vision.request({reason:'当前反复等待或行动没有进展，需要核对实际出口与地形，再选择可推进的任务。',symptom:'stuck'},{signal:this.controller.signal});return;}catch(e){this.controller.signal.throwIfAborted();this.recoveryNote={error:e.code||e.message};}
+    }
+    if(this.mcp.tools().some(t=>t.function.name==='recover_position')){
+      try{this.recoveryNote=await this.gameAction('recover_position',{},'先挪出卡住的位置，再重新找路线。');}catch(e){this.controller.signal.throwIfAborted();this.recoveryNote={error:e.code||e.message};}
+    }else this.recoveryNote={message:'请依据当前状态换一个实际可推进的任务，不能只说话或持续等待。'};
   }
   async gameAction(name, args, say, reaction) {
     if (this.mcp.execute) {
@@ -349,7 +367,7 @@ export class Agent {
         signal: this.controller.signal,
         remainingMs: () => this.store.remaining(),
       }); }
-      catch(e){if(spoken){this.store.say(failureCommentary({message:e.message}),name);this.lastAction={id:randomUUID(),name,before:this.currentSnapshot,result:{state:'failed',result:e.message,evidence:e.gameEvidence},at:Date.now()};}this.store.event('游戏结果：'+name+' failed');throw e;}
+      catch(e){const cancelled=this.controller.signal.aborted||e.name==='AbortError';if(spoken){if(!cancelled)this.store.say(failureCommentary({message:e.message}),name);this.lastAction={id:randomUUID(),name,before:this.currentSnapshot,result:{state:cancelled?'cancelled':'failed',result:e.message,evidence:e.gameEvidence},at:Date.now()};}this.store.event('游戏结果：'+name+(cancelled?' cancelled':' failed'));throw e;}
       finally {this.store.performance.actionMs=Date.now()-started;this.store.performance.action=name;}
       if(spoken)this.lastAction={id:randomUUID(),name,before:this.currentSnapshot,result,at:Date.now()};
       if(result.state==='failed'&&spoken)this.store.say(failureCommentary(result),name);

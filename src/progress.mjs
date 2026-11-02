@@ -28,6 +28,7 @@ export class ProgressGuard {
     return {state: 'not_executed', error: 'REPLAN_REQUIRED', message: '真实资源和位置尚未改变，同一操作已失败两次，不再重复执行。先解决失败原因、换有依据的方案，或在困惑时截图。', previousFailure: failure.message};
   }
   record(name, args, result) {
+    if(result?.state==='cancelled')return;
     if (name==='inspect_game_screen'||['REPLAN_REQUIRED','OBSERVATION_REQUIRED'].includes(result?.error)) return;
     if (result?.state !== 'failed' && !result?.error) return;
     const key = this.actionKey(name,args), previous = this.failures.get(key);
@@ -36,5 +37,6 @@ export class ProgressGuard {
   advice(now = Date.now()) {
     return {recentFailures: [...this.failures.values()].slice(-3), stalled: this.rounds >= 8 && now-this.changedAt >= 45000};
   }
-  shouldPause(now = Date.now()) { return this.blocks >= 3 || (this.rounds >= 16 && now-this.changedAt >= 120000); }
+  needsRecovery(now = Date.now()) { return this.blocks >= 3 || (this.rounds >= 16 && now-this.changedAt >= 120000); }
+  recoveryStarted(now=Date.now()){this.blocks=0;this.rounds=0;this.changedAt=now;}
 }

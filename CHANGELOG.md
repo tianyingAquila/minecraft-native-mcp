@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.5
+
+- Add bounded continuous melee: the model chooses an observed target and an available weapon; the executor pursues and attacks using native cooldowns, with danger, missing-target, durability and cancellation checks. Manual attacks remain available.
+- Distinguish melee range failures from obstructed sight lines and occupied blocks. Manual cancellation no longer generates a failure bubble.
+- Limit passive waits to5seconds and two consecutive requests. Require meaningful actions after passive rounds; diagnose and attempt a verified local escape instead of ending the session solely for lack of progress.
+- Preserve manual pause, duration, balance and connection stops. Validate real cow/skeleton combat, cancellation and local recovery in a disposable1.21.4 world; broader combat scenarios remain unverified.
+
 ## 0.3.4
 
 - Bundle official Fabric launch profiles and library checksums for all12 supported game versions, removing metadata-network requests from normal preparation.

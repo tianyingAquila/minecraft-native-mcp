@@ -21,6 +21,31 @@ function fakeRuntime() {
     },
   };
 }
+test('连续两次短等后要求实际动作，过滤等待；不再原地等20秒',async()=>{
+ const r=fakeRuntime();let rounds=0;const executed=[];
+ r.mcp.tools=()=>['wait_for_game','fight_entity'].map(name=>({type:'function',function:{name,parameters:{type:'object',properties:{},additionalProperties:false}}}));r.mcp.execute=async(name,args)=>{executed.push(name);return {state:'succeeded',result:{}};};
+ const a=new Agent(r,{balanceFn:async()=>({micros:20000000,currency:'CNY',available:true,checkedAt:Date.now()}),chatFn:async body=>{
+  rounds++;if(rounds===3){assert.equal(body.tool_choice,'required');assert.ok(!body.tools.some(t=>t.function.name==='wait_for_game'));}
+  return {choices:[{message:{tool_calls:[{id:'step-'+rounds,type:'function',function:{name:rounds<3?'wait_for_game':'fight_entity',arguments:JSON.stringify({seconds:5,say:'先核对一下眼前的情况。'})}}]}}]};
+ }});a.load=()=>{};a.save=()=>{};r.agent=a;await a.begin({maxRounds:3});assert.deepEqual(executed,['wait_for_game','wait_for_game','fight_entity']);assert.equal(r.paused,'test_complete');
+});
+test('模型不选动作时进入主动恢复和强制工具选择，不因无进展结束冒险',async()=>{
+ const r=fakeRuntime();let rounds=0;
+ r.mcp.tools=()=>[{type:'function',function:{name:'recover_position',parameters:{type:'object',properties:{}}}}];r.mcp.execute=async()=>({state:'interrupted',result:{reason:'no_verified_exit'}});
+ const a=new Agent(r,{balanceFn:async()=>({micros:20000000,currency:'CNY',available:true,checkedAt:Date.now()}),chatFn:async body=>{rounds++;if(rounds>1)assert.equal(body.tool_choice,'required');assert.equal(r.store.status,'running');return {choices:[{message:{content:'继续观察'}}]};}});
+ a.load=()=>{};a.save=()=>{};r.agent=a;await a.begin({maxRounds:5});assert.equal(rounds,5);assert.equal(r.paused,'test_complete');assert.ok(r.store.events.some(e=>e.text.includes('主动诊断')));
+});
+test('恢复不能在尚未查看截图时自动移动，也不在近敌时自动截图耽误行动',async()=>{
+ const r=fakeRuntime();let captures=0,moves=0;r.mcp.tools=()=>[{function:{name:'recover_position'}}];r.mcp.execute=async()=>{moves++;return {state:'interrupted',result:{reason:'enemy_nearby'}};};
+ let pending={id:'pending-image'};r.vision={peek:()=>pending,availability:()=>({available:true}),request:async()=>{captures++;}};
+ const a=new Agent(r);a.controller=new AbortController();a.save=()=>{};r.agent=a;await a.recoverActivity();assert.equal(moves,0);assert.equal(captures,0);
+ pending=null;a.currentSnapshot={result:{situation:{vitals:{health:20},nearby:{hostiles:[{distance:3}]}}}};await a.recoverActivity();assert.equal(captures,0);assert.equal(moves,1);
+});
+test('人工取消不会被播报为游戏失败，也不会覆盖原本的行动短句',async()=>{
+ const r=fakeRuntime(),a=new Agent(r);a.controller=new AbortController();r.agent=a;r.mcp.execute=async()=>{throw new DOMException('paused','AbortError');};
+ await assert.rejects(a.gameAction('wait_for_game',{seconds:5},'等一下熔炉产出。'),e=>e.name==='AbortError');
+ assert.equal(r.store.commentary.text,'等一下熔炉产出。');assert.equal(a.lastAction.result.state,'cancelled');assert.ok(r.store.events.at(-1).text.endsWith('cancelled'));
+});
 test("余额等待期间客户端断线，不再发送计费请求", async () => {
   const r = fakeRuntime();
   let connected = true, charged = 0;

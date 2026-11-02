@@ -18,6 +18,8 @@ Fabric launch metadata and library checksums for the supported versions are bund
 
 Default runtime120minutes; regeneration I, resistance I, night vision I and keepInventory are declared to the model. Pause freezes and saves; stop closes the game. The official API balance guard retains CNY1. The dashboard uses its own model configuration rather than inheriting the active DSH chat model.
 
+Bounded continuous melee lets the model choose an observed target and an available weapon, while the executor pursues and respects native attack cooldowns. Manual attacks remain available; ranged and explosive targets need other tactics. Passive waits last at most5seconds, with no more than two consecutive requests. Stalled play triggers diagnosis, replanning or a locally verified escape rather than a no-progress session stop. Manual pause, duration, balance and connection protections remain active.
+
 Use **New world** in the world manager to name a world, choose its Minecraft version and optionally supply a seed, then prepare the game. Stop the game before creating, switching or deleting worlds. Each world has separate game data and AI memory; new worlds also isolate client identity and navigation caches while reusing shared game files and libraries. Deletion requires confirmation and moves the selected world, AI memory and dedicated cache to the Windows Recycle Bin with restoration instructions. Existing backups are retained.
 
 ## Optional streaming

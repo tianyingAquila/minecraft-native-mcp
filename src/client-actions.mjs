@@ -14,6 +14,8 @@ import { spatialOverview } from './spatial.mjs';
 import {gameWorldName,readPrepared} from './versions.mjs';
 import {describeContainer,loadCookingIndex} from './container-state.mjs';
 import {DiscoveryTracker} from './discovery.mjs';
+import {fightEntity} from './combat.mjs';
+import {recoverPosition} from './recovery.mjs';
 const ALLOWED = new Set([
   "agent_brief",
   "observe",
@@ -74,7 +76,8 @@ const CUSTOM = [
   {name:'dig_tunnel',description:'连续开凿一小段1格宽、2格高矿道并实际走入，每次1–12格、最多90秒。direction为绝对方位north/south/east/west；slope为level水平或down每格下降一级。模型决定方向、长度与继续时机；程序逐格真实检查、挖掘和前进，不逐格请求模型。遇到水/岩浆、敌人、受伤、断崖、落沙、工具将坏、卡住或未加载时提前停止，结果包含实际推进格数和中断原因。不能用于游泳、垂直井、向上挖或自动找钻石；矿石批量采集用collect_blocks，单格精确清障用mine_block。',inputSchema:schema({direction:{type:'string',enum:['north','south','east','west']},length:{type:'integer',minimum:1,maximum:12},slope:{type:'string',enum:['level','down']}},['direction','length'])},
   {name:'place_block_at',description:'在指定空位放置手中的方块；x/y/z是新方块最终占据的空气格，不是承托方块。程序会寻找真实相邻承托面并正常潜行放置，受距离和遮挡限制。先equip_item拿好方块。',inputSchema:schema(xyz,['x','y','z'])},
   {name:'mine_block',description:'挖开指定的单个已观察方块，例如挡路石墙。正常生存挖掘、工具和距离限制生效，不保证掉落已捡到；不要向未观察坐标盲挖。',inputSchema:schema(xyz,['x','y','z'])},
-  {name:'wait_for_game',description:'等待熔炼、世界变化或短暂冷却，期间不调用模型。自动关容器展示正常游戏视角，出现危险时提前结束。',inputSchema:schema({seconds:{type:'integer',minimum:1,maximum:20}},['seconds'])},
+  {name:'wait_for_game',description:'只在确有短时熔炼/冷却等需要时等待1–5秒，危险时提前结束。不能连续站着等天亮或用等待逃避任务；自主模式连续两次后必须选择实际任务。',inputSchema:schema({seconds:{type:'integer',minimum:1,maximum:5}},['seconds'])},
+  {name:'recover_position',description:'卡在原地时短距离脱困：先核验附近两格的身体空间、支撑与危险，再移动到可行位置。不是随机走动或探索路线；遇敌、危险地面或没有已核实出口时交回重新决策。',inputSchema:schema()},
   {name:'drop_items',description:'丢出指定背包格的少量已有物品。先核对格子和物品；观众建议由你判断是否轻松合理，不丢贵重或主线必需品。',inputSchema:schema({slot:{type:'integer',minimum:0,maximum:35},count:{type:'integer',minimum:1,maximum:8}},['slot','count'])},
   {
     name: "get_game_state",
@@ -131,8 +134,13 @@ const CUSTOM = [
     inputSchema: schema(),
   },
   {
+    name:'fight_entity',
+    description:'选择一个已观察目标和背包中的近战武器，程序连续追踪接近、按真实冷却挥击，最多60秒；不在每一步重新请求模型。适合普通动物、僵尸、骷髅。weapon可为auto、held或已有剑/斧/重锤的物品ID。低血、爆炸威胁、追不上或失去目标会返回实际进展，不自动攻击其他生物；消失不等于击杀。弓箭/苦力怕等需其他战术。',
+    inputSchema:schema({uuid:{type:'string'},weapon:{type:'string'},seconds:{type:'integer',minimum:1,maximum:60}},['uuid']),
+  },
+  {
     name: "attack_entity",
-    description: "攻击指定已观察实体，真实冷却、距离、生命和超时限制生效。",
+    description: "手动原地攻击指定实体，不自动追击；只在已经进入真实近战范围时使用。移动目标或需要靠近时优先fight_entity。真实冷却、距离、生命和超时限制生效。",
     inputSchema: schema(
       {
         uuid: { type: "string" },
@@ -416,6 +424,7 @@ export class ClientActions {
         if (!observeAction) return value;
         try {
           const evidence = await this.bridge.call('fish.actionFinish', {}, {signal:combined});
+          if(name==='fight_entity'&&evidence.targetDeathObserved){value={...value,state:'succeeded',result:{...value.result,status:'succeeded',reason:'target_defeated',deathObserved:true}};}
           return {...value, evidence};
         } catch { return {...value, evidenceUnavailable:true}; }
       };
@@ -476,7 +485,7 @@ export class ClientActions {
         }
       } else result = await this.custom(name, args, combined);
       combined.throwIfAborted();
-      if(name==='dig_tunnel' && result.status==='interrupted')return await withEvidence({state:'interrupted',result});
+      if(['dig_tunnel','fight_entity','recover_position'].includes(name) && result.status==='interrupted')return await withEvidence({state:'interrupted',result});
       return await withEvidence({ state: "succeeded", result });
     } catch (error) {
       if (observeAction) {
@@ -496,13 +505,15 @@ export class ClientActions {
   async custom(name, args, signal) {
     const call = (method, params = {}) =>
       this.bridge.call(method, params, { signal });
+    if(name==='fight_entity')return fightEntity(args,{call,signal});
+    if(name==='recover_position')return recoverPosition({call,signal});
     if(name==='inspect_space')return this.spatialStatus(true,signal);
     if(name==='dig_tunnel') {
       try{return await digTunnel(args,{call,signal,discover:since=>this.discoveryStatus(since,signal)});}
       finally{await this.bridge.call('fish.cancel').catch(()=>{});}
     }
     if(name==='wait_for_game'){
-      if(!Number.isInteger(args.seconds)||args.seconds<1||args.seconds>20)throw new Error('等待时长为1–20秒');
+      if(!Number.isInteger(args.seconds)||args.seconds<1||args.seconds>5)throw new Error('短暂等待限1–5秒，请选择有实际进展的任务，不要原地等天亮');
       await call('screen.close');let waited=0;
       while(waited<args.seconds){await delay(1000,undefined,{signal});waited++;const self=await call('player.getState');if(self.health<10)return {waited,interrupted:'生命较低，提前结束等待'};if(waited%2===0){const nearby=await call('perception.entities',{radius:6,kinds:['hostile']});if(nearby.entities.some(e=>e.distance<5))return {waited,interrupted:'近处出现敌人，提前结束等待'};}}
       return {waited};

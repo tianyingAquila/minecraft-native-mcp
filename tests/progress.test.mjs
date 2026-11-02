@@ -12,10 +12,10 @@ test('相同材料不足不因转头或修改等待时间而无限重试，补�
  g.observe(snapshot(8),2000);
  assert.equal(g.blocked('craft_item',args),null);
 });
-test('长期没有实际进展才暂停，普通短暂等待不暂停',()=>{
+test('长期没有实际进展才要求恢复，普通短暂等待不触发',()=>{
  const g=new ProgressGuard();for(let i=0;i<16;i++)g.observe(snapshot(5,i*10),i*9000);
- assert.equal(g.shouldPause(135000),true);
- g.observe(snapshot(6),136000);assert.equal(g.shouldPause(136000),false);
+ assert.equal(g.needsRecovery(135000),true);
+ g.observe(snapshot(6),136000);assert.equal(g.needsRecovery(136000),false);
 });
 test('转头、换快捷栏、反复开关同一容器都不能清除重复失败',()=>{
  const g=new ProgressGuard(),s=snapshot();s.result.situation.openMenu={open:true,type:'minecraft:furnace',position:{x:1,y:65,z:0},slots:[{slot:0,id:'minecraft:raw_iron',count:9}]};

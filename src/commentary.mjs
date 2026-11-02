@@ -9,7 +9,7 @@ export function withCommentary(tool,readOnly=false){
  p.required=[...new Set([...(p.required||[]),'say'])];return t;
 }
 export function actionCommentary(name,text){return QUIET.has(name)?'':shortCommentary(text)||LABELS[name]||(name==='dig_tunnel'?'继续开一小段矿道。':'');}
-export function failureCommentary(result){const text=String(result?.message||result?.result||'');return /missing materials|材料不足/.test(text)?'材料还不够，先补齐。':/obstructed|out of.*reach|视线/.test(text)?'这里被挡住了，得换个办法。':'这一步没成功，再看看。';}
+export function failureCommentary(result){const text=String(result?.message||result?.result||'');return /missing materials|材料不足/.test(text)?'材料还不够，先补齐。':/out of.*reach|too far|距离.*不足|超出.*距离/.test(text)?'还没靠近目标，先调整距离。':/obstructed|line of sight|视线/.test(text)?'视线被挡住了，换个接近的位置。':/目标格必须是空气|已有方块/.test(text)?'这个位置已有方块，换个空位。':'这一步没完成，先核对一下。';}
 
 export function situationOf(value) {
  const body=value?.response?.data||value?.output||value||{};

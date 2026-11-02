@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {withCommentary,shortCommentary,actionCommentary,actionFeedback,reactionAllowed} from '../src/commentary.mjs';
+import {withCommentary,shortCommentary,actionCommentary,actionFeedback,reactionAllowed,failureCommentary} from '../src/commentary.mjs';
 import {Store} from '../src/state.mjs';
+test('够不到、真遮挡和目标格已有方块必须分别说明，不再一概说被挡住',()=>{
+ assert.match(failureCommentary({message:'Target is out of melee reach.'}),/距离/);
+ assert.doesNotMatch(failureCommentary({message:'Target is out of melee reach.'}),/挡/);
+ assert.match(failureCommentary({message:'Target is obstructed; move to a clear line of sight.'}),/视线/);
+ assert.match(failureCommentary({message:'新方块的目标格必须是空气；目标现在为minecraft:grass_block'}),/已有方块/);
+});
 test('主要动作在同一次工具调用里带短句，查询和转头不添加口播字段',()=>{
  const t={type:'function',function:{name:'collect_blocks',parameters:{type:'object',properties:{count:{type:'integer'}},required:['count'],additionalProperties:false}}};
  assert.deepEqual(withCommentary(t).function.parameters.required,['count','say']);assert.equal(t.function.parameters.properties.say,undefined);
