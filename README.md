@@ -10,7 +10,7 @@
 dsh plugin --profile desktop add https://github.com/tianyingAquila/minecraft-native-mcp/releases/latest/download/minecraft-native-mcp.tgz
 ```
 
-重新打开 DSH，在输入框上方 **标准模式右侧**点 **Minecraft**，浏览器会打开控制台。市场收录前可使用上面的一行安装命令；不需要自行编译源码。
+重新打开 DSH，在输入框上方 **标准模式右侧**点 **Minecraft**，浏览器会打开控制台。[插件市场收录申请 #11252](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/11252)审核中；收录前可使用上面的一行安装命令，不需要自行编译源码。
 
 需要你准备两项：
 
