@@ -17,6 +17,10 @@ DSH基础入口在`dsh`，通过宿主webServer挂载模式栏按钮和启动路
 
 ## 游戏与显示
 
+Store.goal既是控制台阶段目标，也是overlayState.goal和每轮决策明确读回的目标。原生FishHud在左上角独立绘制自动换行目标板，气泡留出其下方空间；备用网页读同一字段。目标只经原有set_goal/目标工具更新并保存，动作say不改它；未改变历史上限、观察信息或上下文保留策略。
+
+dig_tunnel的up坡度每步升高一级，先清起步列额外头顶，再清前方身体空间；核对支撑后用普通跳跃与前进，不挖掉脚下支撑。保留level/down及既有危险/取消检查。scripts/smoke_stairs.mjs用独立可回收1.21.4世界验证真实上/下阶梯、常驻目标、长句换行和直播关闭；输出原生截图，不调用模型。
+
 `client-actions/spatial/tunnel/mining`提供有界动作和反馈；`FishSpatialScan`及其他客户端类负责真实观测。上游固定版本JS运行时随包提供，来源与许可证保存在bundled/mcpfabric。
 
 可选`packages/dsh-minecraft-stream`只切换基础控制台的直播显示模式。默认普通界面不显示鲸鱼/气泡；直播模式通过游戏内HUD绘制，浏览器绿幕保留作备用。没有弹幕接收或自动推流。`FISH_OVERLAY_URL`可为开发测试指定独立的挂件数据地址，默认仍为本机控制台。

@@ -30,6 +30,8 @@ dsh plugin --profile desktop add https://github.com/tianyingAquila/minecraft-nat
 
 Pause and click the separate **直播扩展** button. Whale/action/reaction/balance widgets render inside Minecraft. Douyin companion can capture the game process; a browser chroma-key fallback is documented in [streaming](streaming.md). Other software is configured by the user. No chat ingestion, voice generation or automatic broadcasting is implemented. Disable streaming from the paused dashboard to return to ordinary gameplay.
 
+The upper-left stage-goal panel persists independently of action bubbles and wraps longer goals. The model reads the same goal every round and updates it with set_goal when the stage changes. dig_tunnel supports level, descending and ascending stairs; ascent clears takeoff headroom and uses ordinary jumps with the existing hazard checks.
+
 ## Standard MCP
 
 After preparation, configure `node /absolute/path/src/mcp-server.mjs --launch` in any stdio MCP client. This launches the game without autonomous model requests or a DeepSeek key requirement. Requires Node22.16+. Without `--launch`, set `FISH_BRIDGE_CONFIG` to an existing local authenticated bridge configuration; exiting releases actions without stopping the external game. Do not run competing controllers.

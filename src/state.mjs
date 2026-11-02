@@ -160,6 +160,7 @@ export class Store {
       hudEnabled: this.settings.streamingEnabled === true && this.settings.nativeHudEnabled !== false,
       streamingEnabled:this.settings.streamingEnabled===true,
       note: FIXED_NOTE,
+      goal: this.goal,
       balance:
         this.balance && Date.now() - this.balance.checkedAt < 120000
           ? { total: this.balance.total, checkedAt: this.balance.checkedAt }

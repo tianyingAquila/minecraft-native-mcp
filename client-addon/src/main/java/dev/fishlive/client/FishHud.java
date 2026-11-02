@@ -35,6 +35,8 @@ public final class FishHud {
     private static boolean queuedBalance;
     private static long queuedAt, renderedFrames;
     private static int lastBubbleHeight;
+    private static int lastGoalHeight;
+    private static String lastGoalText = "";
     private static JsonObject waitingReaction;
     private static long reactionAt, reactionUntil;
     private static String reactionText = "";
@@ -141,6 +143,18 @@ public final class FishHud {
             String note = text(state, "note", "");
             float noteScale = Math.min(2.0f, 1200f / Math.max(1, client.font.width(note)));
             drawText(graphics, note, (1280 - client.font.width(note) * noteScale) / 2f, 22, noteScale, 0xFFFFFFFF, true);
+            lastGoalText = text(state, "goal", "正在确定下一阶段目标").replaceAll("\\s+", " ").strip();
+            if (lastGoalText.isBlank()) lastGoalText = "正在确定下一阶段目标";
+            List<FormattedCharSequence> goalLines = client.font.split(Component.literal(lastGoalText), 177);
+            lastGoalHeight = 49 + goalLines.size() * 23;
+            int goalBottom = 64 + lastGoalHeight;
+            rounded(graphics, 42, 64, 352, lastGoalHeight, 8, 0xE610283D);
+            drawText(graphics, "当前肥鱼的目标", 56, 76, 1.6f, 0xFFACDCE8, false);
+            graphics.pose().pushPose();
+            graphics.pose().translate(56, 104, 0);
+            graphics.pose().scale(1.8f, 1.8f, 1);
+            for (int i = 0; i < goalLines.size(); i++) graphics.drawString(client.font, goalLines.get(i), 0, Math.round(i * 23 / 1.8f), 0xFFF4F9FF, false);
+            graphics.pose().popPose();
 
             graphics.pose().pushPose();
             graphics.pose().translate(whaleX, whaleY, 0);
@@ -155,12 +169,12 @@ public final class FishHud {
                 int maxTextWidth = 142;
                 String presented = now < reactionUntil && now >= balanceUntil && !reactionText.isBlank() ? reactionText + "\n" + bubbleText : bubbleText;
                 List<FormattedCharSequence> lines = client.font.split(Component.literal(presented), maxTextWidth);
-                int maxLines = Math.max(1, (whaleY - 85) / 26);
+                int maxLines = Math.max(1, (whaleY - goalBottom - 54) / 26);
                 if (lines.size() > maxLines) lines = lines.subList(0, maxLines);
                 int contentWidth = lines.stream().mapToInt(client.font::width).max().orElse(1);
                 int width = Math.max(150, (int)Math.ceil(contentWidth * fontScale) + 30);
                 int bubbleHeight = lines.size() * 26 + 26;
-                int x = whaleX + 24, y = Math.max(50, whaleY - bubbleHeight - 14);
+                int x = whaleX + 24, y = Math.max(goalBottom + 14, whaleY - bubbleHeight - 14);
                 lastBubbleHeight = bubbleHeight;
                 rounded(graphics, x + 3, y + 4, width, bubbleHeight, 8, 0x40152F51);
                 rounded(graphics, x, y, width, bubbleHeight, 8, 0xFF738AB8);
@@ -195,6 +209,8 @@ public final class FishHud {
         result.addProperty("bubbleVisible", System.currentTimeMillis() < hideAt);
         result.addProperty("bubbleText", bubbleText);
         result.addProperty("bubbleHeight", lastBubbleHeight);
+        result.addProperty("goalText", lastGoalText);
+        result.addProperty("goalHeight", lastGoalHeight);
         result.addProperty("reactionText", reactionText);
         result.addProperty("reactionVisible", System.currentTimeMillis() < reactionUntil && System.currentTimeMillis() >= balanceUntil);
         return result;

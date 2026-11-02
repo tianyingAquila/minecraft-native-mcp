@@ -151,3 +151,10 @@ test("观众接口不泄露低余额暂停、错误或控制状态", () => {
   assert.ok(!JSON.stringify(data).includes("凭据"));
   assert.ok(!("status" in data));
 });
+
+test('阶段目标持续独立展示，不被每步气泡覆盖',()=>{
+ const s=new Store();s.persist=false;s.goal='收集一组铁锭，制作全套铁装备';
+ s.say('先把前面的铁矿挖下来。','mine_block');
+ assert.equal(s.overlayState().goal,'收集一组铁锭，制作全套铁装备');
+ assert.equal(s.overlayState().commentary.text,'先把前面的铁矿挖下来。');
+});

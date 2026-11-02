@@ -38,6 +38,7 @@ async function poll() {
     document.body.style.visibility = state.streamingEnabled ? 'visible' : 'hidden';
     if (!state.streamingEnabled) return;
     note.textContent = state.note;
+    document.getElementById('stage-goal').textContent = state.goal || '正在确定下一阶段目标';
     if(state.reaction && state.reaction.seq!==reactionSeq){reactionSeq=state.reaction.seq;waitingReaction=state.reaction;}
     if (first) {
       balanceSeq = state.balanceBubbleSeq;

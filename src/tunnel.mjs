@@ -10,7 +10,7 @@ const same = (a,b) => a.x===b.x && a.y===b.y && a.z===b.z;
 // A finite mechanical action. Direction, depth and whether to continue belong to the model.
 export async function digTunnel(args, {call, signal, discover, sleep = ms => delay(ms, undefined, {signal}), now = Date.now} = {}) {
   const vector = DIRECTIONS[args.direction], length=args.length, slope=args.slope??'level';
-  if (!vector || !Number.isInteger(length) || length<1 || length>12 || !['level','down'].includes(slope)) throw new Error('矿道方向限north/south/east/west，长度1–12格，坡度level/down');
+  if (!vector || !Number.isInteger(length) || length<1 || length>12 || !['level','down','up'].includes(slope)) throw new Error('矿道方向限north/south/east/west，长度1–12格，坡度level/down/up');
   const started=now(), deadline=started+90000;
   const result={status:'interrupted', direction:args.direction, slope, requestedSteps:length, completedSteps:0, brokenBlocks:0, encountered:[]};
   let initial, stepPositions, floor, cut, lastSelf;
@@ -34,6 +34,7 @@ export async function digTunnel(args, {call, signal, discover, sleep = ms => del
     for (const pos of cut) {
       const block=blocks.find(b=>same(b,pos));
       if (block.falling || block.blockEntity || block.hardness<0) {result.obstacle={id:block.id,position:pos,falling:block.falling,blockEntity:block.blockEntity,hardness:block.hardness};stop('unsafe_or_protected_block');}
+      if(blocks.find(b=>b.x===pos.x&&b.z===pos.z&&b.y===pos.y+1)?.falling)stop('falling_ceiling');
     }
     const inv=await call('player.getInventory');
     if ([...inv.hotbar,...inv.main].length>=36) stop('inventory_full');
@@ -48,11 +49,13 @@ export async function digTunnel(args, {call, signal, discover, sleep = ms => del
     if (!initial.onGround || Math.abs(initial.y-Math.round(initial.y))>.15) stop('need_stable_full_block_ground');
     const origin={x:Math.floor(initial.x),y:Math.round(initial.y),z:Math.floor(initial.z)};
     for (let step=1;step<=length;step++) {
-      const feet={x:origin.x+vector[0]*step,y:origin.y-(slope==='down'?step:0),z:origin.z+vector[1]*step};
+      const feet={x:origin.x+vector[0]*step,y:origin.y+(slope==='up'?step:slope==='down'?-step:0),z:origin.z+vector[1]*step};
       floor={...feet,y:feet.y-1};
       // Descending needs one extra head block to clear the approach from the higher step.
       const top=feet.y+(slope==='down'?2:1);
       cut=Array.from({length:top-feet.y+1},(_,i)=>({...feet,y:top-i}));
+      // Clear the takeoff column before jumping; a two-high corridor otherwise blocks ascent.
+      if(slope==='up')cut.unshift({x:feet.x-vector[0],y:feet.y+1,z:feet.z-vector[1]});
       stepPositions=[];
       for(let x=feet.x-1;x<=feet.x+1;x++)for(let z=feet.z-1;z<=feet.z+1;z++)for(let y=feet.y-1;y<=top+1;y++)stepPositions.push({x,y,z});
       for (const pos of cut) {
@@ -77,7 +80,7 @@ export async function digTunnel(args, {call, signal, discover, sleep = ms => del
         if(distance<closest-.03){closest=distance;movedAt=now();}
         if(Math.abs(lastSelf.y-feet.y)>1.2) stop('unexpected_height_change');
         await call('control.lookAt',{x:feet.x+.5,y:lastSelf.y+1.62,z:feet.z+.5});
-        await call('control.setInput',{forward:distance>.2,back:false,left:false,right:false,jump:false,sneak:false,sprint:false});
+        await call('control.setInput',{forward:distance>.2,back:false,left:false,right:false,jump:slope==='up'&&lastSelf.onGround&&lastSelf.y<feet.y,sneak:false,sprint:false});
         await sleep(50);
         await call('control.stop');
       }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.6
+
+- Display the model-maintained stage goal persistently at the upper left of the native streaming HUD and browser fallback, with wrapping and separation from per-action bubbles.
+- Feed the current stage goal back into every autonomous decision; update it through the existing set_goal tool when the stage changes, preserving memory and the existing context policy.
+- Add upward stair digging to dig_tunnel, clearing takeoff headroom before normal jumps and retaining support, hazard, damage, time and cancellation checks.
+- Validate actual ascent/descent and native short/long goal rendering in a disposable1.21.4 world without model calls; other versions are build-checked separately.
+
 ## 0.3.5
 
 - Add bounded continuous melee: the model chooses an observed target and an available weapon; the executor pursues and attacks using native cooldowns, with danger, missing-target, durability and cancellation checks. Manual attacks remain available.

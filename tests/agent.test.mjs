@@ -61,9 +61,10 @@ test("余额等待期间客户端断线，不再发送计费请求", async () =>
 });
 test('动作短句与动作共用一次模型请求，say不泄漏给严格游戏参数',async()=>{
  const r=fakeRuntime();let charged=0;
+ r.store.goal='收集铁锭并制作全套铁装备';
  r.mcp.tools=()=>[{type:'function',function:{name:'collect_blocks',parameters:{type:'object',properties:{count:{type:'integer'}},required:['count'],additionalProperties:false}}}];
  r.mcp.execute=async(name,args)=>{assert.deepEqual(args,{count:1});return {state:'succeeded',result:'picked up'};};
- const a=new Agent(r,{balanceFn:async()=>({micros:20000000,currency:'CNY',available:true,checkedAt:Date.now()}),chatFn:async body=>{charged++;assert.ok(body.tools[0].function.parameters.required.includes('say'));return {choices:[{message:{tool_calls:[{id:'action',type:'function',function:{name:'collect_blocks',arguments:'{"count":1,"say":"先去收集一些木头。"}'}}]}}]};}});
+ const a=new Agent(r,{balanceFn:async()=>({micros:20000000,currency:'CNY',available:true,checkedAt:Date.now()}),chatFn:async body=>{charged++;assert.ok(body.messages.at(-1).content.includes('当前阶段目标（直播目标板持续显示，阶段未改变时不要重写）：收集铁锭并制作全套铁装备'));assert.ok(body.tools[0].function.parameters.required.includes('say'));return {choices:[{message:{tool_calls:[{id:'action',type:'function',function:{name:'collect_blocks',arguments:'{"count":1,"say":"先去收集一些木头。"}'}}]}}]};}});
  a.load=()=>{};a.save=()=>{};r.agent=a;await a.begin({maxRounds:1});assert.equal(charged,1);assert.equal(r.store.overlayState().commentary.text,'先去收集一些木头。');
 });
 test('新环境信息进入决策并允许反应，同一发现不在下一轮重复标新',async()=>{

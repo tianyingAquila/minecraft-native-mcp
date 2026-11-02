@@ -18,7 +18,7 @@ function world({slope='level', obstacle, onBreak}={}) {
     if(method==='fish.probeBlocks'||method==='perception.blocks')return {blocks:args.positions.map(block)};
     if(method==='interact.breakBlock'){air.add(`${args.x},${args.y},${args.z}`);onBreak?.(++breaks,self);}
     if(method==='control.lookAt')aim=args;
-    if(method==='control.setInput'&&args.forward){self.x=aim.x;self.z=aim.z;if(slope==='down')self.y--;}
+    if(method==='control.setInput'&&args.forward){self.x=aim.x;self.z=aim.z;if(slope==='down')self.y--;if(slope==='up'&&args.jump)self.y++;}
     return {};
   };
   return {call,calls,self,now:()=>clock,sleep:async ms=>{clock+=ms;},signal:new AbortController().signal};
@@ -59,4 +59,16 @@ test('新环境在挖开后出现就交回决策，同一已知环境不每步�
  w.discover=async since=>({sequence:++reads===1?3:4,updates:since===undefined?[]:[{sequence:4,salient:true,label:'疑似矿井'}]});
  const stopped=await digTunnel({direction:'east',length:5},w);assert.equal(stopped.reason,'new_environment');assert.equal(stopped.brokenBlocks,1);assert.equal(stopped.completedSteps,0);assert.equal(stopped.discovery.updates[0].label,'疑似矿井');
  const known=world();known.discover=async()=>({sequence:4,updates:[]});assert.equal((await digTunnel({direction:'east',length:2},known)).completedSteps,2);
+});
+
+test('向上阶梯清除起步头顶并正常跳上，危险头顶不盲挖',async()=>{
+ const w=world({slope:'up'});const result=await digTunnel({direction:'east',length:3,slope:'up'},w);
+ assert.equal(result.status,'completed');assert.equal(result.completedSteps,3);assert.equal(result.position.y,67);
+ const first=w.calls.find(([m])=>m==='interact.breakBlock');assert.deepEqual(first[1],{x:0,y:66,z:0,mode:'survival'});
+ assert.ok(w.calls.some(([m,a])=>m==='control.setInput'&&a.jump));
+ for(const obstacle of [{fluid:true},{falling:true},{blockEntity:true}]){
+  const danger=world({slope:'up',obstacle:p=>p.x===0&&p.y===66&&p.z===0?obstacle:{}});
+  const r=await digTunnel({direction:'east',length:2,slope:'up'},danger);
+  assert.equal(r.completedSteps,0);assert.equal(danger.calls.some(([m])=>m==='interact.breakBlock'),false);
+ }
 });

@@ -40,6 +40,22 @@ body.preview {
   bottom: 8.5vh;
   width: clamp(105px, 16vw, 300px);
 }
+#goal-board {
+  position: absolute;
+  top: 9vh;
+  left: 3.3vw;
+  width: min(28vw, 440px);
+  padding: 12px 16px;
+  border: 1px solid #738ab8;
+  border-radius: 10px;
+  background: #10283de8;
+  color: #f4f9ff;
+  font-size: clamp(14px, 1.5vw, 26px);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+#goal-board strong { color: #acdce8; font-size: .8em; }
+#stage-goal { margin: 6px 0 0; white-space: pre-wrap; }
 .whale img {
   display: block;
   width: 100%;

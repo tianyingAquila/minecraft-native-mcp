@@ -23,7 +23,7 @@ const localTools = [
     function: {
       name: "set_goal",
       description:
-        "在重要目标/地点/资源改变、死亡或切换维度后更新目标和已确认的长期游戏记忆；没有重要变化时不重复调用。notes会完整替换旧摘要，须保留仍有效的重要事实，不要只提交增量。",
+        "goal是直播目标板常驻的当前阶段成果，例如收集一组铁锭并制作全套铁装备；不随每个动作改写，完成或策略改变后才更新。在重要目标/地点/资源改变、死亡或切换维度后更新目标和已确认的长期游戏记忆；没有重要变化时不重复调用。notes会完整替换旧摘要，须保留仍有效的重要事实，不要只提交增量。",
       parameters: {
         type: "object",
         properties: {
@@ -148,7 +148,7 @@ export class Agent {
       ];
       if(requireAction){const active=tools.filter(t=>t.function.name==='inspect_game_screen'||!PASSIVE.has(t.function.name)&&!this.mcp.isReadOnly?.(t.function.name));if(active.length)tools=active;}
       const current =
-        "当前真实游戏状态：\n" +
+        "当前阶段目标（直播目标板持续显示，阶段未改变时不要重写）：" + this.store.goal + "\n当前真实游戏状态：\n" +
         encodeObservation(snapshot) +
         '\n上一主要动作的真实反馈：'+JSON.stringify(this.feedback)+'\n当前是否适合轻量反应：'+reactionAllowed(this.feedback,snapshot)+
         "\n执行反馈（重复失败时必须先解决原因，不要重复开关同一容器）：" + JSON.stringify(this.progress.advice()) +

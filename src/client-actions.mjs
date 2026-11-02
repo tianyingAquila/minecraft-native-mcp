@@ -73,7 +73,7 @@ const xyz = {
 };
 const CUSTOM = [
   {name:'inspect_space',description:'刷新以角色为中心16格、上下12格的空间简报，并读取北上东右的多高度ASCII切片。平时每轮已自动给空间摘要；遇到复杂洞穴、分岔、跨层或不清楚如何绕行时按需调用，非截图、不转头。仅射线可见表面与保守地面连通估计，?不等于墙；候选通路不保证可直接走到。',inputSchema:schema()},
-  {name:'dig_tunnel',description:'连续开凿一小段1格宽、2格高矿道并实际走入，每次1–12格、最多90秒。direction为绝对方位north/south/east/west；slope为level水平或down每格下降一级。模型决定方向、长度与继续时机；程序逐格真实检查、挖掘和前进，不逐格请求模型。遇到水/岩浆、敌人、受伤、断崖、落沙、工具将坏、卡住或未加载时提前停止，结果包含实际推进格数和中断原因。不能用于游泳、垂直井、向上挖或自动找钻石；矿石批量采集用collect_blocks，单格精确清障用mine_block。',inputSchema:schema({direction:{type:'string',enum:['north','south','east','west']},length:{type:'integer',minimum:1,maximum:12},slope:{type:'string',enum:['level','down']}},['direction','length'])},
+  {name:'dig_tunnel',description:'连续开凿一小段1格宽、2格高矿道并实际走入，每次1–12格、最多90秒。direction为绝对方位north/south/east/west；slope为level水平、down每格下降一级、up每格上升一级（自行清理头顶并跳上台阶）。模型决定方向、长度与继续时机；程序逐格真实检查、挖掘和前进，不逐格请求模型。遇到水/岩浆、敌人、受伤、断崖、落沙、工具将坏、卡住或未加载时提前停止，结果包含实际推进格数和中断原因。用于普通实心地面的阶梯出入，不用于游泳、垂直井或自动找钻石；矿石批量采集用collect_blocks，单格精确清障用mine_block。',inputSchema:schema({direction:{type:'string',enum:['north','south','east','west']},length:{type:'integer',minimum:1,maximum:12},slope:{type:'string',enum:['level','down','up']}},['direction','length'])},
   {name:'place_block_at',description:'在指定空位放置手中的方块；x/y/z是新方块最终占据的空气格，不是承托方块。程序会寻找真实相邻承托面并正常潜行放置，受距离和遮挡限制。先equip_item拿好方块。',inputSchema:schema(xyz,['x','y','z'])},
   {name:'mine_block',description:'挖开指定的单个已观察方块，例如挡路石墙。正常生存挖掘、工具和距离限制生效，不保证掉落已捡到；不要向未观察坐标盲挖。',inputSchema:schema(xyz,['x','y','z'])},
   {name:'wait_for_game',description:'只在确有短时熔炼/冷却等需要时等待1–5秒，危险时提前结束。不能连续站着等天亮或用等待逃避任务；自主模式连续两次后必须选择实际任务。',inputSchema:schema({seconds:{type:'integer',minimum:1,maximum:5}},['seconds'])},
