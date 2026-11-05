@@ -31,6 +31,8 @@ def sources(version):
             text=file.read_text(encoding='utf-8')
             # Explicit version branches stay in one shared source; no runtime reflection.
             if minor<2:
+                text=text.replace('p.onGround(),p.horizontalCollision','p.onGround()')
+                text=text.replace('private static void fish$filter(ServerLevel level,Piglin','private static void fish$filter(Piglin').replace('private static void fish$invalid(ServerLevel level,Piglin','private static void fish$invalid(Piglin')
                 text=text.replace('level.getMinY()','level.getMinBuildHeight()').replace('level.getMaxY()','level.getMaxBuildHeight()')
                 text=text.replace('@Inject(method="hurtServer",','@Inject(method="hurt",').replace('ServerLevel level,DamageSource source','DamageSource source')
                 text=text.replace('import net.minecraft.client.renderer.RenderType;','').replace('graphics.blit(RenderType::guiTextured, WHALE, 0, 0, 610f, 0f, 610, 610, -610, 610, 610, 610);','graphics.blit(WHALE, 0, 0, 610, 610, 610f, 0f, -610, 610, 610, 610);')
@@ -38,6 +40,7 @@ def sources(version):
                 text=text.replace('p.getInventory().selected=slot;','p.getInventory().setSelectedSlot(slot);')
                 text=text.replace('done.accept(Screenshot.takeScreenshot(ClientMc.mc().getMainRenderTarget()));','Screenshot.takeScreenshot(ClientMc.mc().getMainRenderTarget(),done);')
             if minor>=6:
+                text=text.replace('player.serverLevel()','player.level()')
                 text=text.replace('import net.minecraft.client.renderer.RenderType;','import net.minecraft.client.renderer.RenderPipelines;').replace('RenderType::guiTextured','RenderPipelines.GUI_TEXTURED')
                 text=text.replace('.pushPose()','.pushMatrix()').replace('.popPose()','.popMatrix()')
                 text=re.sub(r'graphics\.pose\(\)\.scale\(([^;\n]*), 1\)',r'graphics.pose().scale(\1)',text)

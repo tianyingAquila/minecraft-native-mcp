@@ -16,6 +16,8 @@ import {describeContainer,loadCookingIndex} from './container-state.mjs';
 import {DiscoveryTracker} from './discovery.mjs';
 import {fightEntity} from './combat.mjs';
 import {recoverPosition} from './recovery.mjs';
+import {locateResource} from './assistance.mjs';
+import {barterPiglins} from './barter.mjs';
 const ALLOWED = new Set([
   "agent_brief",
   "observe",
@@ -40,6 +42,7 @@ const ALLOWED = new Set([
 ]);
 const JOBS = new Set(["travel_to", "explore", "collect_blocks", "craft_item"]);
 const READ = new Set([
+  'locate_resource',
   'inspect_space',
   "get_game_state",
   "get_inventory",
@@ -72,6 +75,8 @@ const xyz = {
   z: { type: "number" },
 };
 const CUSTOM = [
+  {name:'locate_resource',description:'辅助查找岩浆源簇、地狱堡垒/村庄/废弃传送门/末地要塞，或已加载的成年猪灵/烈焰人/末影人；返回来源、有限搜索范围和坐标，不保证安全可达。按需查询，不连续重查相同区域。',inputSchema:schema({target:{type:'string',enum:['lava_lake','nether_fortress','village','ruined_portal','stronghold','piglin','blaze','enderman']},radius:{type:'integer',minimum:16,maximum:256},structureChunks:{type:'integer',minimum:1,maximum:64}},['target'])},
+  {name:'barter_piglins',description:'地狱中选择会靠近的成年近战猪灵，用背包方块搭两格高台，向塔下逐枚投已有金锭并等待交换，下来捡产物。持弩猪灵不参与。只以背包新增量确认；预算/时限到或危险时返回部分结果。开始前留两空槽、至少两块普通建筑块。',inputSchema:schema({item:{type:'string'},count:{type:'integer',minimum:1,maximum:64},goldBudget:{type:'integer',minimum:1,maximum:64},seconds:{type:'integer',minimum:15,maximum:180},uuid:{type:'string'}},['item','count','goldBudget'])},
   {name:'inspect_space',description:'刷新以角色为中心16格、上下12格的空间简报，并读取北上东右的多高度ASCII切片。平时每轮已自动给空间摘要；遇到复杂洞穴、分岔、跨层或不清楚如何绕行时按需调用，非截图、不转头。仅射线可见表面与保守地面连通估计，?不等于墙；候选通路不保证可直接走到。',inputSchema:schema()},
   {name:'dig_tunnel',description:'连续开凿一小段1格宽、2格高矿道并实际走入，每次1–12格、最多90秒。direction为绝对方位north/south/east/west；slope为level水平、down每格下降一级、up每格上升一级（自行清理头顶并跳上台阶）。模型决定方向、长度与继续时机；程序逐格真实检查、挖掘和前进，不逐格请求模型。遇到水/岩浆、敌人、受伤、断崖、落沙、工具将坏、卡住或未加载时提前停止，结果包含实际推进格数和中断原因。用于普通实心地面的阶梯出入，不用于游泳、垂直井或自动找钻石；矿石批量采集用collect_blocks，单格精确清障用mine_block。',inputSchema:schema({direction:{type:'string',enum:['north','south','east','west']},length:{type:'integer',minimum:1,maximum:12},slope:{type:'string',enum:['level','down','up']}},['direction','length'])},
   {name:'place_block_at',description:'在指定空位放置手中的方块；x/y/z是新方块最终占据的空气格，不是承托方块。程序会寻找真实相邻承托面并正常潜行放置，受距离和遮挡限制。先equip_item拿好方块。',inputSchema:schema(xyz,['x','y','z'])},
@@ -226,10 +231,11 @@ export class ClientActions {
     );
     const z = createRequire(path.join(base, "package.json"))("zod").z;
     this.definitions = new Map(
-      AGENT_TOOLS.filter((d) => ALLOWED.has(d.name)).map((d) => [
-        d.name,
-        { ...d, validator: z.object(d.inputSchema).strict() },
-      ]),
+      AGENT_TOOLS.filter((d) => ALLOWED.has(d.name)).map((d) => {
+        const inputSchema={...d.inputSchema};
+        if(d.name==='observe')inputSchema.radius=z.number().int().min(1).max(2).default(1).describe('按需扫描半径1–2个区块；默认1，避免无关地形挤占上下文。');
+        return [d.name,{...d,inputSchema,validator:z.object(inputSchema).strict()}];
+      }),
     );
     this.catalogue = [...this.definitions.values()]
       .map((d) => ({
@@ -239,6 +245,7 @@ export class ClientActions {
       }))
       .concat(CUSTOM);
     for(const tool of this.catalogue){
+      if(tool.name==='observe')tool.description='按需扫描附近1–2区块，更新地图与资源记忆；每轮已有空间简报，不必重复扫描。找岩浆、结构或目标生物优先locate_resource。';
       if(['travel_to','explore','collect_blocks','dig_tunnel'].includes(tool.name))tool.description+=' 途中出现本次尚未见过的重要环境线索时可提前中断并返回discovery，由你评估探索、绕开或记位置，不代表原任务完成。';
       if(tool.name==='container_transfer')tool.description+=' 返回实际移动后的结构化container格子与熔炉blockers。direction=take取出指定物品；输出槽阻塞应取出旧产物，补煤无效。';
       if(tool.name==='close_container')tool.description='关闭当前实际打开的容器；返回关闭后的真实界面状态。已经关闭时会返回SCREEN_ALREADY_CLOSED，不要重复关闭，更不会因此让熔炉开始烧。';
@@ -485,7 +492,7 @@ export class ClientActions {
         }
       } else result = await this.custom(name, args, combined);
       combined.throwIfAborted();
-      if(['dig_tunnel','fight_entity','recover_position'].includes(name) && result.status==='interrupted')return await withEvidence({state:'interrupted',result});
+      if(['dig_tunnel','fight_entity','recover_position','barter_piglins'].includes(name) && result.status==='interrupted')return await withEvidence({state:'interrupted',result});
       return await withEvidence({ state: "succeeded", result });
     } catch (error) {
       if (observeAction) {
@@ -505,6 +512,8 @@ export class ClientActions {
   async custom(name, args, signal) {
     const call = (method, params = {}) =>
       this.bridge.call(method, params, { signal });
+    if(name==='locate_resource')return locateResource(args,{call,signal});
+    if(name==='barter_piglins')return barterPiglins(args,{call,signal});
     if(name==='fight_entity')return fightEntity(args,{call,signal});
     if(name==='recover_position')return recoverPosition({call,signal});
     if(name==='inspect_space')return this.spatialStatus(true,signal);

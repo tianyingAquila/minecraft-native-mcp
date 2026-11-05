@@ -23,14 +23,14 @@ const localTools = [
     function: {
       name: "set_goal",
       description:
-        "goal是直播目标板常驻的当前阶段成果，例如收集一组铁锭并制作全套铁装备；不随每个动作改写，完成或策略改变后才更新。在重要目标/地点/资源改变、死亡或切换维度后更新目标和已确认的长期游戏记忆；没有重要变化时不重复调用。notes会完整替换旧摘要，须保留仍有效的重要事实，不要只提交增量。",
+        "goal是目标板常驻的阶段成果，不随每个动作改写；完成或策略改变后才更新。重要地点/资源改变、死亡或切换维度后更新已确认记忆。notes省略时保留旧摘要；提供时完整替换，须保留仍有效的事实，不要只提交增量。",
       parameters: {
         type: "object",
         properties: {
           goal: { type: "string", maxLength: 100 },
           notes: { type: "string", maxLength: 2400, description: "完整更新后的长期记忆摘要；保留有效地点/事实，去掉过期状态与未经确认的推测。" },
         },
-        required: ["goal", "notes"],
+        required: ["goal"],
         additionalProperties: false,
       },
     },
@@ -326,8 +326,10 @@ export class Agent {
       return metadata;
     }
     if (name === "set_goal") {
-      this.store.goal = String(args.goal || "").slice(0, 100);
-      this.notes = String(args.notes || "").slice(0, 5000);
+      if(typeof args.goal!=='string'||!args.goal.trim())throw Error('阶段目标不能为空。');
+      if(args.notes!==undefined&&typeof args.notes!=='string')throw Error('游戏记忆必须是文字；不传notes则保留已有记忆。');
+      this.store.goal = args.goal.slice(0, 100);
+      if(args.notes!==undefined)this.notes = args.notes.slice(0, 5000);
       this.save();
       return { saved: true };
     }

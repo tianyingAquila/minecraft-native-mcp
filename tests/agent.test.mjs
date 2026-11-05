@@ -21,6 +21,13 @@ function fakeRuntime() {
     },
   };
 }
+
+test('只更新阶段目标时保留旧地点记忆，显式更新notes才替换',async()=>{
+ const r=fakeRuntime(),a=new Agent(r);a.notes='地狱门在10,64,20';a.save=()=>{};
+ await a.execute('set_goal',{goal:'收集珍珠'});assert.equal(a.notes,'地狱门在10,64,20');
+ await a.execute('set_goal',{goal:'寻找末地门',notes:'已收集14颗珍珠'});assert.equal(a.notes,'已收集14颗珍珠');
+ await assert.rejects(a.execute('set_goal',{goal:''}));
+});
 test('连续两次短等后要求实际动作，过滤等待；不再原地等20秒',async()=>{
  const r=fakeRuntime();let rounds=0;const executed=[];
  r.mcp.tools=()=>['wait_for_game','fight_entity'].map(name=>({type:'function',function:{name,parameters:{type:'object',properties:{},additionalProperties:false}}}));r.mcp.execute=async(name,args)=>{executed.push(name);return {state:'succeeded',result:{}};};

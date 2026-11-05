@@ -54,6 +54,19 @@ public final class FishLiveClient implements ClientModInitializer {
         FishHud.initialize();
         FishActionObservation.initialize();
         var router=McpFabric.router();
+        router.register("fish.assistInfo",ctx->ClientMc.call(()->{
+            Gates.vision();JsonObject o=new JsonObject();String directory=System.getProperty("fish.assistDirectory");
+            o.addProperty("available",directory!=null);if(directory!=null)o.addProperty("directory",directory);return o;
+        }));
+        router.register("fish.offerGold",ctx->ClientMc.call(()->{
+            Gates.playerControl();var p=ClientMc.player();
+            if(!p.getMainHandItem().is(net.minecraft.world.item.Items.GOLD_INGOT))throw RpcException.badRequest("Hold a gold ingot before offering it.");
+            lookAt(new Vec3(ctx.getDouble("x"),ctx.getDouble("y"),ctx.getDouble("z")));
+            // Inventory-menu THROW scatters randomly. The Q-key packet drops one
+            // held item in the server player's look direction; send that first.
+            p.connection.send(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Rot(p.getYRot(),p.getXRot(),p.onGround(),p.horizontalCollision));
+            boolean sent=p.drop(false);JsonObject o=new JsonObject();o.addProperty("offered",sent);return o;
+        }));
         router.register("fish.hudStatus",ctx->ClientMc.call(FishHud::status));
         router.register("fish.actionStart",ctx->ClientMc.call(FishActionObservation::begin));
         router.register("fish.actionFinish",ctx->ClientMc.call(FishActionObservation::finish));

@@ -56,6 +56,7 @@ export class NativeClient {
     const { args } = JSON.parse(fs.readFileSync(launch, "utf8"));
     // Launch profiles are generated per workspace; do not reuse another workspace's game directory.
     const ownedArgs = [...args];
+    ownedArgs.unshift(`-Dfish.assistDirectory=${path.join(DATA,'worlds',gameWorldName(settings),'fish-assist')}`);
     ownedArgs.unshift(`-Dfishlive.controlUrl=${process.env.FISH_OVERLAY_URL||'http://127.0.0.1:'+PORT+'/api/overlay'}`);
     ownedArgs[ownedArgs.indexOf("--gameDir") + 1] = worldClientDirectory(settings,prepared);
     fs.mkdirSync(path.join(ROOT, "logs"), { recursive: true });

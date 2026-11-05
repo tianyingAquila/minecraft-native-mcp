@@ -69,6 +69,7 @@ export function createWorldFiles(worldDir, settings) {
     "data/minecraft/tags/function/load.json",
     JSON.stringify({ values: ["fish:load"] }),
   );
+  for(const name of ['fortress','stronghold'])write('data/fish/tags/worldgen/structure/'+name+'.json',JSON.stringify({values:['minecraft:'+name]}));
   write(
     "data/minecraft/tags/function/tick.json",
     JSON.stringify({ values: ["fish:tick"] }),
@@ -120,6 +121,7 @@ export class Minecraft {
     createWorldFiles(cwd, {...this.store.settings,worldSeed:info.seed});
     const nativeProfile = prepared?.serverProfile||path.join(ROOT, "runtime/native-server/launch.json");
     let javaArgs = [
+      '-Dfish.assistDirectory='+path.join(cwd,'fish-assist'),
       "-Xms512M",
       "-Xmx2G",
       "-Dfile.encoding=UTF-8",
@@ -134,7 +136,7 @@ export class Minecraft {
       );
       if (!fs.existsSync(nativeProfile) || !fs.existsSync(pauseMod))
         throw new Error("真正客户端的暂停服务端尚未准备。");
-      javaArgs = JSON.parse(fs.readFileSync(nativeProfile, "utf8")).args;
+      javaArgs = ['-Dfish.assistDirectory='+path.join(cwd,'fish-assist'),...JSON.parse(fs.readFileSync(nativeProfile, "utf8")).args];
       fs.mkdirSync(path.join(cwd, "mods"), { recursive: true });
       fs.copyFileSync(pauseMod, path.join(cwd, "mods/fish-pause-server.jar"));
     }
