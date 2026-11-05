@@ -78,3 +78,11 @@ node scripts/smoke_game.mjs --version 1.21.4 --minecraft-home D:/Games/.minecraf
 GitHub Actions按12版本编译，合并产物后运行测试、包内完整性及排除规则检查；版本标签通过构建后自动生成两个Release安装包。CI编译和本机实机验收分别记录，不互相替代。发布前应以新profile安装tarball验证，不在同一profile直接把仍指向开发源码的link安装替换为tarball。
 
 世界、凭据、日志、下载、游戏JAR和测试数据不进入公开提交或发布包。敏感凭据始终留在DSH原位置或受控子进程环境；公开挂件接口不包含控制错误或密钥。
+
+## 第三方仓库检查
+
+2026-11-05已在GitHub安装M8ven Verify，仅选择`tianyingAquila/minecraft-native-mcp`。GitHub安装设置实测确认仓库权限为只读源码、元数据和Dependabot告警；安装时还授权读取账号邮箱地址。该集成用于通知M8ven代码更新并安排复检，属于仓库维护服务，无需游戏使用者安装或提供DeepSeek密钥。
+
+本次已确认GitHub安装存在、仅选中此仓库，M8ven回调返回已连接1个仓库。公开收录页暂仍显示`Live Monitored: not connected`及旧提交`447d84a`，因此发布者认领、Live显示及推送后自动重扫尚未验收；以[收录页](https://m8ven.ai/mcp/tianyingaquila/minecraft-native-mcp)的实际扫描提交和日期核对，不能由已安装推断检查已通过。
+
+暂停或撤销：GitHub个人设置 → Applications → [Installed GitHub Apps](https://github.com/settings/installations) → M8ven Verify → Configure，使用Suspend暂停或Uninstall卸载。需要撤销账号邮箱授权时，同时在Authorized GitHub Apps中找到M8ven Verify并撤销。恢复时从[M8ven连接页](https://m8ven.ai/connect)重新安装并仅选择此仓库。集成权限不会修改源码；README徽章可单独移除。
