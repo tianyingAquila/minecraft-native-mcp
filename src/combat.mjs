@@ -21,7 +21,7 @@ export async function fightEntity(args,{call,signal,now=Date.now,sleep=ms=>delay
  try{
   await call('fish.cancel');await call('screen.close');initial=await call('player.getState');
   const weapon=chooseMeleeWeapon(await call('player.getInventory'),args.weapon??'auto');result.weapon=weapon.id;
-  if(!weapon.held)await call('fish.equip',{slot:weapon.slot,hotbarSlot:0});
+  if(!weapon.held)await call('fish.equip',{slot:weapon.slot,hotbarSlot:7});
   while(now()<deadline){
    signal?.throwIfAborted();const self=await call('player.getState');
    if(self.gameMode!=='survival'||self.dimension!==initial.dimension)return finish('player_state_changed');

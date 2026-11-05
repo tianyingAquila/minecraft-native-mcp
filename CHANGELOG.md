@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Equip backpack items and melee weapons into hotbar slot 7, avoiding Baritone's automatic pickaxe slot. Verify the actual held item and durability before reporting a successful equip.
 - Update the direct Zod dependency and both installation lockfiles from 4.6.5 to 4.6.7 to address GHSA-mrhx-c7xc-m3w5. Existing release archives are unchanged.
 - Add the M8ven publisher-verification badge to the Chinese and English READMEs. Verification status and scan freshness are reported by M8ven.
 

@@ -583,7 +583,17 @@ export class ClientActions {
           button: 0,
           mode: "quick_move",
         });
-      return call("fish.equip", { slot: args.slot, hotbarSlot: 0 });
+      const inventory = await call("player.getInventory");
+      const wanted = [...inventory.hotbar, ...inventory.main].find(i => i.slot === args.slot);
+      if (!wanted) throw new Error("指定背包格没有物品，请先刷新背包。");
+      // Baritone's inventory manager reserves hotbar slot 0 for a pickaxe.
+      await call("fish.equip", { slot: args.slot, hotbarSlot: 7 });
+      await delay(150, undefined, { signal });
+      const after = await call("player.getInventory");
+      const held = after.hotbar.find(i => i.slot === after.selectedSlot);
+      if (held?.id !== wanted.id || (held.damage || 0) !== (wanted.damage || 0))
+        throw new Error("装备后实际手持物品与目标不符，请刷新背包后重新选择。");
+      return { selected: true, slot: after.selectedSlot, item: held.id, count: held.count };
     }
     if (name === "eat_food") {
       const before = await call("player.getState");
