@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Agent, compactHistory } from "../src/agent.mjs";
+import { Agent } from "../src/agent.mjs";
 import { Store } from "../src/state.mjs";
 import { VisionDiagnostics } from "../src/vision.mjs";
 function fakeRuntime() {
@@ -142,21 +142,6 @@ test("时长到期在读取余额与模型调用前停止", async () => {
   r.agent = a;
   await a.begin();
   assert.equal(r.paused, "duration");
-});
-test("裁剪按完整动作组进行，不拆散工具调用和结果", () => {
-  const h = [
-    [
-      { role: "assistant", tool_calls: [{ id: "old" }] },
-      { role: "tool", tool_call_id: "old", content: "x".repeat(200) },
-    ],
-    [
-      { role: "assistant", tool_calls: [{ id: "new" }] },
-      { role: "tool", tool_call_id: "new", content: "ok" },
-    ],
-  ];
-  const c = compactHistory(h, 170);
-  assert.equal(c.length, 1);
-  assert.equal(c[0][1].tool_call_id, "new");
 });
 test("截图后先把图像交给模型，阻止同批后续行动且不重复上传或持久化图像", async () => {
   const r = fakeRuntime();

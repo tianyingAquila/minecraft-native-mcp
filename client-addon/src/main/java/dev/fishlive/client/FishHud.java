@@ -79,6 +79,12 @@ public final class FishHud {
         hideAt = now + duration;
     }
     private static void updateBubble(JsonObject state, long now) {
+        if (Boolean.parseBoolean(text(state, "contextCompacting", "false"))) {
+            show("正在压缩上下文", now, 1000);
+            waitingCommentary = null; waitingReaction = null;
+            balanceUntil = 0; reactionUntil = 0; queuedBalance = false;
+            return;
+        }
         JsonObject reaction = object(state, "reaction");
         long newReactionAt = number(reaction, "at", 0);
         if (newReactionAt > reactionAt) { reactionAt = newReactionAt; waitingReaction = reaction; }

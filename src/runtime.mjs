@@ -217,6 +217,43 @@ export class Runtime {
     this.store.event("开始自主冒险。");
     void this.agent.begin(options);
   }
+  async withFrozenGame(work) {
+    const signal = this.agent.controller.signal, epoch = this.lifecycle;
+    const assertRunning = () => {
+      signal.throwIfAborted();
+      if (epoch !== this.lifecycle || this.store.status !== 'running') throw new DOMException('已暂停','AbortError');
+    };
+    assertRunning();
+    const startedAt = Date.now();
+    this.store.contextCompaction = {state:'running',startedAt};
+    this.store.reason = '正在压缩上下文，游戏已暂时冻结。';
+    this.store.stopClock();
+    this.store.event('正在压缩上下文。');
+    let succeeded = false;
+    try {
+      await this.mcp.freeze();
+      await this.minecraft.freeze();
+      assertRunning();
+      const result = await work();
+      assertRunning();
+      await this.mcp.resume();
+      assertRunning();
+      this.minecraft.resume();
+      assertRunning();
+      this.store.startClock();
+      this.store.reason = '';
+      this.store.say('上下文整理好了，继续冒险。','context_compaction');
+      succeeded = true;
+      return result;
+    } catch (e) {
+      await this.mcp.freeze().catch(() => {});
+      await this.minecraft.freeze().catch(() => {});
+      throw e;
+    } finally {
+      this.store.contextCompaction = {state:succeeded?'complete':signal.aborted?'cancelled':'failed',startedAt,finishedAt:Date.now()};
+      this.store.save();
+    }
+  }
   async pause(code = "operator", message = "已暂停整局，世界已保存。") {
     if (this.pauseTask) return this.pauseTask;
     this.lifecycle++;

@@ -74,7 +74,8 @@ function render(s) {
   const timing=s.performance||{};
   $("performance-state").textContent=timing.modelMs===undefined?'':`最近一轮：模型 ${(timing.modelMs/1000).toFixed(1)}秒 · 余额检查 ${((timing.balanceMs||0)/1000).toFixed(1)}秒 · 游戏动作 ${((timing.actionMs||0)/1000).toFixed(1)}秒`;
   const request=s.lastRequest;
-  $("request-usage").textContent=request?`最近一次模型请求：输入 ${request.promptTokens??'未返回'} token（其中缓存 ${request.cacheHitTokens??'未返回'}）· 输出 ${request.completionTokens??'未返回'} token`:'本次启动尚无模型请求。';
+  const context=s.contextPressure;
+  $("request-usage").textContent=(request?`最近一次${request.kind==='context_compaction'?'上下文整理':'模型请求'}：输入 ${request.promptTokens??'未返回'} token（其中缓存 ${request.cacheHitTokens??'未返回'}）· 输出 ${request.completionTokens??'未返回'} token`:'本次启动尚无模型请求。')+(context?`；下次输入${context.basis==='utf8_upper_bound'?'保守上界':'估计'} ${context.estimatedTokens.toLocaleString()} / ${context.thresholdTokens.toLocaleString()} token，达到后自动整理。`:'');
   const space=s.spatial;
   $("spatial-summary").textContent=space?.available?[
     `范围：周围${space.range.horizontal}格，上下${space.range.vertical}格；朝向${space.heading}°。${space.local.ceiling}。`,

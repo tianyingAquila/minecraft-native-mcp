@@ -14,6 +14,7 @@ import { unwrap } from "./mcp.mjs";
 import { VISION_TOOL } from "./vision.mjs";
 import { ProgressGuard } from './progress.mjs';
 import {encodeObservation,requestUsage} from './observation.mjs';
+import {CONTEXT_TRIGGER_TOKENS,contextPressure,measureContext,splitHistory,summaryRequest,summaryText,validMeter} from './memory.mjs';
 import {withCommentary,shortCommentary,actionCommentary,failureCommentary,actionFeedback,reactionAllowed,reactionEventKey,situationOf} from './commentary.mjs';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const PASSIVE=new Set(['wait_for_game','look_at','close_container','close_game_screen','set_goal','inspect_game_screen']);
@@ -36,12 +37,6 @@ const localTools = [
     },
   },
 ];
-export function compactHistory(history, maxBytes = 85000) {
-  const out = [...history];
-  while (out.length > 1 && Buffer.byteLength(JSON.stringify(out)) > maxBytes)
-    out.shift();
-  return out;
-}
 export class Agent {
   constructor(
     runtime,
@@ -54,6 +49,8 @@ export class Agent {
     this.chatFn = chatFn;
     this.history = [];
     this.notes = "";
+    this.memory = '';
+    this.contextMeter = null;
     this.controller = null;
     this.task = null;
     this.emptyRounds = 0;
@@ -71,23 +68,65 @@ export class Agent {
   load() {
     try {
       const saved = JSON.parse(fs.readFileSync(this.sessionFile, "utf8"));
-      this.history = compactHistory(saved.history || []);
+      this.history = Array.isArray(saved.history) ? saved.history : [];
       this.notes = String(saved.notes || "").slice(0, 5000);
+      this.memory = String(saved.memory || '');
+      this.contextMeter = validMeter(saved.contextMeter) ? saved.contextMeter : null;
     } catch {
       this.history = [];
       this.notes = "";
+      this.memory = ''; this.contextMeter = null;
     }
   }
   save() {
     fs.mkdirSync(DATA, { recursive: true });
-    fs.writeFileSync(
-      this.sessionFile,
+    try { fs.writeFileSync(
+      this.sessionFile + '.tmp',
       JSON.stringify({
         history: this.history,
         notes: this.notes,
+        memory:this.memory,
+        contextMeter:this.contextMeter,
         updatedAt: Date.now(),
       }),
     );
+    fs.renameSync(this.sessionFile + '.tmp',this.sessionFile);
+    } catch(e) { fs.rmSync(this.sessionFile + '.tmp',{force:true}); throw e; }
+  }
+  recordUsage(body, response, kind = 'decision') {
+    this.store.calls++;
+    const usage = response.usage || {};
+    this.store.lastRequest = {...requestUsage(body,usage),kind};
+    this.store.usage.prompt += usage.prompt_tokens || 0;
+    this.store.usage.completion += usage.completion_tokens || 0;
+    this.store.usage.cached += usage.prompt_cache_hit_tokens || 0;
+    this.contextMeter = measureContext(body,usage);
+  }
+  async compactContext(body) {
+    const split = splitHistory(this.history,this.contextMeter);
+    if (!split.older.length) throw new Error('单轮记录或固定输入过大，无法安全整理；原记录保留。');
+    await this.runtime.withFrozenGame(async () => {
+      const request = summaryRequest(body);
+      const balance = await this.balanceFn();
+      this.store.balance = balance;
+      this.controller.signal.throwIfAborted();
+      if (this.store.status !== 'running') throw new DOMException('已暂停','AbortError');
+      if (!canSpend(balance,reserveFor(request))) throw new ServiceError('low_balance','余额不足以整理上下文，原记录保留，已暂停。');
+      await this.mcp.assertReady?.();
+      this.controller.signal.throwIfAborted();
+      const response = await this.chatFn(request,{signal:this.controller.signal});
+      this.recordUsage(request,response,'context_compaction');
+      this.controller.signal.throwIfAborted();
+      if (this.store.status !== 'running') throw new DOMException('已暂停','AbortError');
+      const memory = summaryText(response);
+      const previous = {history:this.history,memory:this.memory,contextMeter:this.contextMeter};
+      this.history = split.recent; this.memory = memory;
+      // Rebase once with measured density; using the old absolute count or a
+      // raw-byte fallback here could immediately summarize the retained tail again.
+      this.contextMeter = validMeter(this.contextMeter) ? {...this.contextMeter,afterCompaction:true} : null;
+      try { this.save(); } catch (e) { Object.assign(this,previous); throw e; }
+      this.store.event('上下文整理完成；已归纳'+split.older.length+'轮旧记录，保留'+split.recent.length+'轮完整近期记录。');
+    });
   }
   begin(options = {}) {
     this.controller = new AbortController();
@@ -153,7 +192,7 @@ export class Agent {
         '\n上一主要动作的真实反馈：'+JSON.stringify(this.feedback)+'\n当前是否适合轻量反应：'+reactionAllowed(this.feedback,snapshot)+
         "\n执行反馈（重复失败时必须先解决原因，不要重复开关同一容器）：" + JSON.stringify(this.progress.advice()) +
         "\n已保存游戏记忆：" +
-        this.notes + '\n截图当前可用情况：'+JSON.stringify(visionAvailable||{available:false})+'\n持续推进：'+JSON.stringify({requireAction,consecutiveWaits:this.waitStreak,passiveRounds:this.idleRounds,recovery:this.recoveryNote})+'；夜晚也请选择可推进的采集、制作、探索、睡觉或战斗任务，不连续原地等天亮。脚边实心与树冠不能证明封闭安全屋。';
+        this.notes + '\n自动整理的长期记忆（旧事实如与当前实测冲突，以当前为准）：'+this.memory + '\n截图当前可用情况：'+JSON.stringify(visionAvailable||{available:false})+'\n持续推进：'+JSON.stringify({requireAction,consecutiveWaits:this.waitStreak,passiveRounds:this.idleRounds,recovery:this.recoveryNote})+'；夜晚也请选择可推进的采集、制作、探索、睡觉或战斗任务，不连续原地等天亮。脚边实心与树冠不能证明封闭安全屋。';
       const image = this.runtime.vision?.peek();
       const observation = image
         ? [
@@ -192,6 +231,11 @@ export class Agent {
         thinking: { type: "disabled" },
         temperature: 0.7,
       };
+      this.store.contextPressure = {...contextPressure(body,this.contextMeter),thresholdTokens:CONTEXT_TRIGGER_TOKENS};
+      if (this.store.contextPressure.estimatedTokens >= CONTEXT_TRIGGER_TOKENS) {
+        await this.compactContext(body);
+        continue; // Refresh the real state after thawing; never act on the old snapshot.
+      }
       phaseAt=Date.now();
       const balance = await this.balanceFn();
       this.store.performance.balanceMs=Date.now()-phaseAt;
@@ -215,12 +259,7 @@ export class Agent {
       });
       this.store.performance.modelMs=Date.now()-phaseAt;
       if (image) this.runtime.vision.consumed(image.id);
-      this.store.calls++;
-      const usage = response.usage || {};
-      this.store.lastRequest=requestUsage(body,usage);
-      this.store.usage.prompt += usage.prompt_tokens || 0;
-      this.store.usage.completion += usage.completion_tokens || 0;
-      this.store.usage.cached += usage.prompt_cache_hit_tokens || 0;
+      this.recordUsage(body,response);
       const message = response.choices[0].message;
       for(const e of snapshot?.result?.situation?.spatial?.environment?.updates||[])this.seenDiscoveries.add(e.id);
       while(this.seenDiscoveries.size>128)this.seenDiscoveries.delete(this.seenDiscoveries.values().next().value);
@@ -296,7 +335,7 @@ export class Agent {
         this.save();
         return;
       }
-      this.history = compactHistory([...this.history, group]);
+      this.history.push(group);
       this.save();
       this.store.save();
       this.idleRounds=activeAttempted?0:this.idleRounds+1;

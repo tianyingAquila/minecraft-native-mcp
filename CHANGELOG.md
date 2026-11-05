@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace the autonomous loop’s 85KB history deletion with API-calibrated, roughly 500k-token summarization and durable memory; retain recent complete action groups, freeze the game/timer and show a persistent compaction bubble. Preserve history on failure/cancellation and count summary billing. No new dependency or model tool.
+
 - Assisted random-world progression: bounded lava/structure/mob hints, budgeted native piglin bartering, crossbow-piglin neutrality for DeepSeekFish; only two new model tools. Native1.21.4 validation and per-version build status are recorded in docs/compatibility.md.
 
 

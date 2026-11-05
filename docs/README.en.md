@@ -8,6 +8,8 @@ Control a real Minecraft Java survival player through standard MCP, retaining th
 
 Development source now includes two assisted-progression tools: `locate_resource` supplies bounded server-assisted locations; `barter_piglins` builds a two-block pillar, offers carried gold ingots individually and verifies collected inventory gains. Crossbow piglins ignore DeepSeekFish on the managed server; melee piglins retain normal aggression. Worlds remain random. No extra bot process or runtime dependency is installed. These changes are not in the previous release package; see [architecture](architecture.md#辅助通关).
 
+Autonomous play now summarizes around 500,000 input tokens, retaining roughly 100,000 tokens of recent complete action groups plus durable memory. The game and timer freeze while the bubble shows “正在压缩上下文”. Only successful summarization resumes play; failure preserves the original history. Trigger estimates are API-calibrated, with a conservative UTF-8 fallback. Summary calls are billed normally. This does not change DSH chat settings. See [context memory](architecture.md#上下文记忆).
+
 ## Install
 
 ```powershell
@@ -46,6 +48,6 @@ Workspace: `$DSH_HOME/minecraft-native-mcp`. Worlds and memory are version-isola
 
 Remove using `dsh plugin --profile desktop remove minecraft-native-mcp` and optionally `... remove dsh-minecraft-stream`, then reopen DSH. Back up worlds before deleting workspace files.
 
-On 2026-11-05, the current source was updated to Zod 4.6.7 and fixed an equipment-slot conflict with Baritone: all 110 automated tests and integrity checks for existing artifacts across 12 versions passed, and `npm audit` reported no known vulnerabilities. Existing release archives are unchanged. The M8ven badge reflects publisher-verification status; follow it for the scan scope and date. Integration status, permissions and removal are documented under [repository checks](architecture.md#第三方仓库检查).
+On 2026-11-05, the current source was updated to Zod 4.6.7 and fixed an equipment-slot conflict with Baritone: all 117 automated tests and integrity checks for existing artifacts across 12 versions passed, and `npm audit` reported no known vulnerabilities. Existing release archives are unchanged. The M8ven badge reflects publisher-verification status; follow it for the scan scope and date. Integration status, permissions and removal are documented under [repository checks](architecture.md#第三方仓库检查).
 
 Windows x64 and DSH0.2.0-rc.2 are the current local targets. Read the [version evidence](compatibility.md); short controlled tests do not prove unattended completion, long-duration stability or all machine environments. New code is MIT licensed; [third-party notices](../THIRD_PARTY.md) apply to dependencies.

@@ -146,6 +146,8 @@ export class Store {
       usage: this.usage,
       performance: this.performance,
       lastRequest: this.lastRequest??null,
+      contextPressure:this.contextPressure??null,
+      contextCompaction:this.contextCompaction??null,
       spatial: this.spatial??null,
       connected: this.connected,
       diagnostics: this.diagnostics || {
@@ -159,6 +161,7 @@ export class Store {
     return {
       hudEnabled: this.settings.streamingEnabled === true && this.settings.nativeHudEnabled !== false,
       streamingEnabled:this.settings.streamingEnabled===true,
+      contextCompacting:this.contextCompaction?.state==='running',
       note: FIXED_NOTE,
       goal: this.goal,
       balance:
