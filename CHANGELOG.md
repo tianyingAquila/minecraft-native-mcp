@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Update the direct Zod dependency and both installation lockfiles from 4.6.5 to 4.6.7 to address GHSA-mrhx-c7xc-m3w5. Existing release archives are unchanged.
+- Add the M8ven publisher-verification badge to the Chinese and English READMEs. Verification status and scan freshness are reported by M8ven.
+
 ## 0.3.6
 
 - Display the model-maintained stage goal persistently at the upper left of the native streaming HUD and browser fallback, with wrapping and separation from per-action bubbles.

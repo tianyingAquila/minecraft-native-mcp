@@ -1,5 +1,7 @@
 # Minecraft Native MCP
 
+[![M8ven Verified](https://m8ven.ai/badge/mcp/tianyingaquila-minecraft-native-mcp-16hc3z?variant=verified&v=e65ccf78034beeeb7eb5c91e1fba6ca2)](https://m8ven.ai/mcp/tianyingaquila-minecraft-native-mcp-16hc3z?s=readme)
+
 [English](docs/README.en.md) · [兼容与验证](docs/compatibility.md) · [架构与开发](docs/architecture.md) · [直播扩展](docs/streaming.md)
 
 让 DeepSeek 或其他 MCP 客户端操作真正的 Minecraft Java 生存玩家。保留原生第一视角、血条、饱食度和物品栏，提供空间概览、采集合成、寻路战斗、连续矿道和异常截图诊断。容器观察统一提供真实槽位/用途、空格、光标持物、原生取放条件和可用进度；熔炉等窗口会给出明确阻塞原因。移动镜头跟随寻路方向，空间摘要包含真实群系和可见环境线索；遇到新线索时，长段机械任务会提前交回模型评估探索机会。
@@ -68,6 +70,8 @@ dsh plugin --profile desktop add https://github.com/tianyingAquila/minecraft-nat
 卸载基础版：`dsh plugin --profile desktop remove minecraft-native-mcp`。可选扩展使用`... remove dsh-minecraft-stream`。重开DSH后生效；需要清理工作目录时先备份世界再移走目录。插件只停止自己启动的进程。没有系统服务、开机启动、管理员安装或全局PATH修改。
 
 ## 验证与边界
+
+2026-11-05：当前源码将Zod更新至4.6.7，103项自动测试和12版本既有构建产物完整性检查通过，`npm audit`报告0个已知漏洞。此结果仅针对当前源码依赖，不覆盖旧发布包；M8ven徽章显示其平台当前的发布者验证状态，扫描详情及时间以链接页面为准。
 
 Windows x64为当前支持平台，DSH0.2.0-rc.2为本机验证版本。逐游戏版本的编译/真实启动/挖掘/截图证据见[兼容表](docs/compatibility.md)。自动测试、构建和打包通过后才生成发布产物；完整无人值守生存、连续长局与末影龙通关仍未验收。
 

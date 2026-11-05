@@ -1,5 +1,7 @@
 # Minecraft Native MCP
 
+[![M8ven Verified](https://m8ven.ai/badge/mcp/tianyingaquila-minecraft-native-mcp-16hc3z?variant=verified&v=e65ccf78034beeeb7eb5c91e1fba6ca2)](https://m8ven.ai/mcp/tianyingaquila-minecraft-native-mcp-16hc3z?s=readme)
+
 [中文](../README.md) · [Compatibility evidence](compatibility.md) · [Architecture](architecture.md) · [Streaming](streaming.md)
 
 Control a real Minecraft Java survival player through standard MCP, retaining the native first-person HUD. The DSH plugin adds an autonomous DeepSeek dashboard; streaming widgets are a separate optional package.
@@ -41,5 +43,7 @@ Spatial summaries cover16 blocks horizontally and±12 vertically; candidates are
 Workspace: `$DSH_HOME/minecraft-native-mcp`. Worlds and memory are version-isolated; legacy1.21.4 paths are preserved. Managed-source upgrades back up code and retain data/runtime; custom projectDirectory locations require manual source updates. DSH dependencies are reused through workspace directory links. No system service, startup task, global PATH or administrator installation is added.
 
 Remove using `dsh plugin --profile desktop remove minecraft-native-mcp` and optionally `... remove dsh-minecraft-stream`, then reopen DSH. Back up worlds before deleting workspace files.
+
+On 2026-11-05, the current source was updated to Zod 4.6.7: all 103 automated tests and integrity checks for existing artifacts across 12 versions passed, and `npm audit` reported no known vulnerabilities. Existing release archives are unchanged. The M8ven badge reflects publisher-verification status; follow it for the scan scope and date.
 
 Windows x64 and DSH0.2.0-rc.2 are the current local targets. Read the [version evidence](compatibility.md); short controlled tests do not prove unattended completion, long-duration stability or all machine environments. New code is MIT licensed; [third-party notices](../THIRD_PARTY.md) apply to dependencies.
