@@ -1,6 +1,6 @@
 # Minecraft Native MCP
 
-[![M8ven Verified](https://m8ven.ai/badge/mcp/tianyingaquila-minecraft-native-mcp-16hc3z?variant=verified&v=e65ccf78034beeeb7eb5c91e1fba6ca2)](https://m8ven.ai/mcp/tianyingaquila-minecraft-native-mcp-16hc3z?s=readme)
+[![M8ven Score](https://m8ven.ai/badge/mcp/tianyingaquila-minecraft-native-mcp-16hc3z?v=e65ccf78034beeeb7eb5c91e1fba6ca2)](https://m8ven.ai/mcp/tianyingaquila-minecraft-native-mcp-16hc3z?s=readme)
 
 [中文](../README.md) · [Compatibility evidence](compatibility.md) · [Architecture](architecture.md) · [Streaming](streaming.md)
 
