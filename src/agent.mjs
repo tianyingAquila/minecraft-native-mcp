@@ -19,6 +19,27 @@ import {CONTEXT_TRIGGER_TOKENS,contextPressure,measureContext,splitHistory,summa
 import {withCommentary,shortCommentary,actionCommentary,failureCommentary,actionFeedback,reactionAllowed,reactionEventKey,situationOf} from './commentary.mjs';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const PASSIVE=new Set(['wait_for_game','look_at','close_container','close_game_screen','set_goal','inspect_game_screen']);
+// Hide redundant upstream memory/goal/map tools in autonomous loop (kept in standalone MCP).
+const AGENT_OMITTED_TOOLS = new Set([
+  'remember', 'recall', 'memory_update', 'memory_verify',
+  'goal_add', 'goal_update', 'goal_list',
+  'agent_brief', 'map_view', 'explore_next',
+  'place_block',
+]);
+const DIMENSION_HIDDEN_TOOLS = {
+  'minecraft:overworld': new Set(['barter_piglins', 'farm_blaze_spawner', 'break_end_crystal', 'fight_dragon']),
+  'minecraft:the_nether': new Set(['return_to_surface', 'activate_end_portal', 'break_end_crystal', 'fight_dragon']),
+  'minecraft:the_end': new Set(['return_to_surface', 'make_obsidian', 'build_nether_portal', 'barter_piglins', 'farm_blaze_spawner', 'activate_end_portal']),
+};
+export function filterAgentTools(tools, dimension) {
+  const dimHidden = DIMENSION_HIDDEN_TOOLS[dimension];
+  return tools.filter(t => {
+    const name = t?.function?.name;
+    if (AGENT_OMITTED_TOOLS.has(name)) return false;
+    if (dimHidden?.has(name)) return false;
+    return true;
+  });
+}
 const localTools = [
   {
     type: "function",
@@ -201,8 +222,9 @@ export class Agent {
       const visionAvailable=this.runtime.vision?.availability();
       if(visionAvailable?.available)this.visionUnavailableRequests=0;
       const requireAction=this.forceAction||this.emptyRounds>0||this.idleRounds>=2||this.waitStreak>=2||this.progress.advice().stalled;
+      const currentDim = situationOf(snapshot)?.position?.dimension || snapshot?.result?.situation?.dimension || null;
       let tools = [
-        ...this.mcp.tools().map(t=>withCommentary(t,this.mcp.isReadOnly?.(t.function.name))),
+        ...filterAgentTools(this.mcp.tools(), currentDim).map(t=>withCommentary(t,this.mcp.isReadOnly?.(t.function.name))),
         ...localTools,
         ...(this.runtime.vision && visionAvailable?.available!==false ? [VISION_TOOL] : []),
       ];

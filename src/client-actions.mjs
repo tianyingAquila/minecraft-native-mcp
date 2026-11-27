@@ -27,6 +27,7 @@ import {pillar,breakCrystal} from './end-build.mjs';
 import {returnToSurface} from './surface.mjs';
 import {makeObsidian} from './obsidian.mjs';
 import {farmBlazeSpawner} from './blaze-farm.mjs';
+import {dropItemsSafe} from './drop.mjs';
 const ALLOWED = new Set([
   "agent_brief",
   "observe",
@@ -101,8 +102,8 @@ const CUSTOM = [
   {name:'place_block_at',description:'在指定空位放置方块；x/y/z是新方块最终占据的空气或可替换格（支持替换水、岩浆、草、薄雪等），不是承托方块。可选item指定背包中方块ID自动切到手中；不传则用当前手持方块。',inputSchema:schema({...xyz,item:{type:'string'}},['x','y','z'])},
   {name:'mine_block',description:'挖开指定的单个已观察方块，例如挡路石墙。正常生存挖掘、工具和距离限制生效，不保证掉落已捡到；不要向未观察坐标盲挖。',inputSchema:schema(xyz,['x','y','z'])},
   {name:'wait_for_game',description:'只在确有短时熔炼/冷却等需要时等待1–5秒，危险时提前结束。不能连续站着等天亮或用等待逃避任务；自主模式连续两次后必须选择实际任务。',inputSchema:schema({seconds:{type:'integer',minimum:1,maximum:5}},['seconds'])},
-  {name:'recover_position',description:'卡在原地时短距离脱困：先核验附近两格的身体空间、支撑与危险，再移动到可行位置。不是随机走动或探索路线；遇敌、危险地面或没有已核实出口时交回重新决策。',inputSchema:schema()},
-  {name:'drop_items',description:'丢出指定背包格的已有物品。清理多余圆石/泥土/杂石腾空槽时，传 wholeStack: true 或足够大的 count 一次清空整格；不要丢主线工具和贵重物品。',inputSchema:schema({slot:{type:'integer',minimum:0,maximum:35},count:{type:'integer',minimum:1,maximum:64},wholeStack:{type:'boolean'}},['slot'])},
+  {name:'recover_position',description:'卡在原地或水下溺水时脱困：若处于水中或氧气不足，程序会持续按住跳跃上浮换气并尝试上岸（低血也可用）；在陆地卡住时核验附近两格安全通路并短距离挪动。',inputSchema:schema()},
+  {name:'drop_items',description:'丢出指定背包格的已有物品。清理多余圆石/泥土/杂石腾空槽时，传 wholeStack: true 或数量1–64；在窄矿道内会自动在侧边挖出2格深小垃圾坑并定向精准丢入，防止被吸回背包。不要丢主线工具和贵重物品。',inputSchema:schema({slot:{type:'integer',minimum:0,maximum:35},count:{type:'integer',minimum:1,maximum:64},wholeStack:{type:'boolean'}},['slot'])},
   {
     name: "get_game_state",
     description: "读取当前真实血量、饱食度、位置、背包与附近生物。",
@@ -546,6 +547,15 @@ export class ClientActions {
               });
               return await withEvidence(buriedResult);
             }
+            let jobResult = job.result;
+            if (name === 'travel_to' && typeof jobResult === 'string' && jobResult.includes('after 0 segments')) {
+              try {
+                const st = await this.bridge.call('player.getState', {}, { signal: combined });
+                if (st.inWater && (st.air ?? 300) < 250) {
+                  jobResult += '（注意：你仍在水中且氧气不足，原地到达不会让你上浮，请立即调用 recover_position 持续上浮换气/上岸！）';
+                }
+              } catch {}
+            }
             return await withEvidence({
               state:
                 job.state === "done"
@@ -553,7 +563,7 @@ export class ClientActions {
                   : job.state === "cancelled"
                     ? "cancelled"
                     : "failed",
-              result: job.result,
+              result: jobResult,
               progress: job.log.slice(-5),
             });
           }
@@ -661,50 +671,7 @@ export class ClientActions {
       finally{await this.bridge.call('control.stop').catch(()=>{});}
     }
     if(name==='drop_items') {
-      const whole = args.wholeStack === true;
-      const reqCount = whole ? 64 : args.count;
-      if(!Number.isInteger(args.slot)||args.slot<0||args.slot>35||(!whole&&(!Number.isInteger(reqCount)||reqCount<1||reqCount>64)))throw new Error('请指定背包格0–35，以及数量1–64或wholeStack:true');
-      const inv=await call('player.getInventory');
-      const stack=[...inv.hotbar,...inv.main].find(i=>i.slot===args.slot);
-      if(!stack)throw new Error('该格没有物品，请先刷新背包');
-      const dropWhole = whole || reqCount >= stack.count;
-      const expected = dropWhole ? stack.count : reqCount;
-      if(!dropWhole && stack.count<expected)throw new Error('该格物品数量不足');
-      await call('container.close');
-      try {
-        const self = await call('player.getState');
-        const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-        const px = Math.floor(self.x), py = Math.floor(self.y) + 1, pz = Math.floor(self.z);
-        const probePos = dirs.flatMap(([dx,dz]) => [{x:px+dx,y:py,z:pz+dz},{x:px+dx*2,y:py,z:pz+dz*2}]);
-        const blocks = (await call('perception.blocks', {positions: probePos})).blocks || [];
-        let best = null;
-        for (let i = 0; i < dirs.length; i++) {
-          const b1 = blocks[i*2], b2 = blocks[i*2+1];
-          if (b1?.air && b2?.air) { best = dirs[i]; break; }
-          if (!best && b1?.air) best = dirs[i];
-        }
-        if (best) {
-          await call('control.lookAt', {x: self.x + best[0]*4, y: self.y + 1.8, z: self.z + best[1]*4});
-          await delay(80, undefined, {signal});
-        }
-      } catch {}
-      if(dropWhole){
-        await call('inventory.dropSlot',{slot:args.slot,wholeStack:true});
-        await delay(150,undefined,{signal});
-      } else {
-        for(let i=0;i<expected;i++){await call('inventory.dropSlot',{slot:args.slot,wholeStack:false});await delay(60,undefined,{signal});}
-      }
-      const after=await call('player.getInventory');
-      const left=[...after.hotbar,...after.main].find(i=>i.slot===args.slot)?.count||0;
-      if(stack.count-left!==expected)throw new Error('丢弃后的背包数量未确认，请重新查询');
-      await delay(500,undefined,{signal});
-      const settled=await call('player.getInventory');
-      const usedSlots=[...settled.hotbar,...settled.main].length;
-      const freeSlots=Math.max(0,36-usedSlots);
-      const totalBefore=[...inv.hotbar,...inv.main].filter(i=>i.id===stack.id).reduce((s,i)=>s+i.count,0);
-      const totalAfter=[...settled.hotbar,...settled.main].filter(i=>i.id===stack.id).reduce((s,i)=>s+i.count,0);
-      if(totalAfter>=totalBefore)return {dropped:0,recollected:true,item:stack.id,usedSlots,freeSlots,message:'物品丢出后落在脚边并被立刻吸回背包；请转身朝空旷处或先挪开一步再丢弃，若是为了做新工具无需丢弃旧工具。'};
-      return {dropped:expected,item:stack.id,remainingInSlot:left,usedSlots,freeSlots,...(freeSlots===0?{hint:'背包仍满(36/36)，请传 wholeStack: true 整组清空某格杂石或调用 organize_inventory 合并零碎堆叠。'}:{})};
+      return dropItemsSafe(args, {call, signal});
     }
     if (name === "get_game_state") return this.status();
     if (name === "get_inventory") return call("player.getInventory");

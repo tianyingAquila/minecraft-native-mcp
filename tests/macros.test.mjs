@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import {returnToSurface} from '../src/surface.mjs';
 import {makeObsidian} from '../src/obsidian.mjs';
 import {buildEnclosurePlan,farmBlazeSpawner} from '../src/blaze-farm.mjs';
+import {recoverPosition} from '../src/recovery.mjs';
+import {dropItemsSafe} from '../src/drop.mjs';
+import {filterAgentTools} from '../src/agent.mjs';
 
 test('returnToSurface 在露天位置直接返回成功；在地下自动选安全方向挖阶梯直到露天',async()=>{
   let y=30;
@@ -127,4 +130,73 @@ test('farmBlazeSpawner 自动规划防飞封顶并留打怪口，封顶后击杀
   assert.equal(res.rodsGained,2);
   assert.equal(res.killedBlazes,2);
   assert.ok(placed.length>0);
+});
+
+test('filterAgentTools 按维度过滤无关工具并移除冗余上游记忆/目标工具',()=>{
+  const mk=name=>({type:'function',function:{name,parameters:{type:'object',properties:{}}}});
+  const all=['travel_to','remember','recall','goal_add','place_block','return_to_surface','make_obsidian','barter_piglins','farm_blaze_spawner','fight_dragon'].map(mk);
+  const ow=filterAgentTools(all,'minecraft:overworld').map(t=>t.function.name);
+  assert.deepEqual(ow,['travel_to','return_to_surface','make_obsidian']);
+  const nether=filterAgentTools(all,'minecraft:the_nether').map(t=>t.function.name);
+  assert.deepEqual(nether,['travel_to','make_obsidian','barter_piglins','farm_blaze_spawner']);
+  const end=filterAgentTools(all,'minecraft:the_end').map(t=>t.function.name);
+  assert.deepEqual(end,['travel_to','fight_dragon']);
+});
+
+test('recoverPosition 水下低血时持续按住跳跃上浮直到水面换气或上岸',async()=>{
+  let y=28,air=40,clock=0,inWater=true,jumpCalls=0;
+  const call=async(method,args={})=>{
+    if(method==='player.getState')return {x:0.5,y,z:0.5,dimension:'minecraft:overworld',health:4,inWater,inLava:false,onGround:false,air};
+    if(method==='fish.probeBlocks'){
+      return {blocks:args.positions.map(p=>({...p,loaded:true,air:p.y>=31,fluid:p.y<31,collision:false,fullSupport:false,id:p.y>=31?'minecraft:air':'minecraft:water'}))};
+    }
+    if(method==='control.setInput'&&args.jump){
+      jumpCalls++;
+      y+=1;
+      if(y>=30){air=300;}
+    }
+    return {};
+  };
+  const res=await recoverPosition({call,now:()=>clock,sleep:async ms=>{clock+=ms;}});
+  assert.equal(res.status,'succeeded');
+  assert.equal(res.reason,'surfaced_for_air');
+  assert.ok(jumpCalls>=2);
+  assert.equal(res.airAfter,300);
+});
+
+test('dropItemsSafe 在封闭窄矿道自动侧边挖2格深垃圾坑并定向精准丢入，且二次丢弃复用现成坑',async()=>{
+  let cobble=64;
+  const dug=[];
+  let aimedDropCalls=0;
+  const pitDug=new Set();
+  const key=p=>`${p.x},${p.y},${p.z}`;
+  const call=async(method,args={})=>{
+    if(method==='player.getState')return {x:0.5,y:10,z:0.5,dimension:'minecraft:overworld',health:20,inWater:false,inLava:false,onGround:true};
+    if(method==='player.getInventory')return {hotbar:cobble>0?[{slot:0,id:'minecraft:cobblestone',count:cobble}]:[],main:[]};
+    if(method==='fish.probeBlocks'){
+      return {blocks:args.positions.map(p=>{
+        const isAir=pitDug.has(key(p));
+        return {...p,loaded:true,air:isAir,fluid:false,blockEntity:false,falling:false,hardness:isAir?0:1.5,fullSupport:!isAir,id:isAir?'minecraft:air':'minecraft:stone'};
+      })};
+    }
+    if(method==='fish.dropAimed'){
+      aimedDropCalls++;
+      cobble=0;
+      return {dropped:64};
+    }
+    return {};
+  };
+  const mine=async(_call,pos)=>{dug.push(pos);pitDug.add(key(pos));return {broke:'minecraft:stone',position:pos};};
+  const first=await dropItemsSafe({slot:0,wholeStack:true},{call,mine,sleep:async()=>{}});
+  assert.equal(first.dropped,64);
+  assert.equal(first.method,'dug_pit');
+  assert.equal(dug.length,3);
+  assert.equal(aimedDropCalls,1);
+
+  // Second drop reuses the existing pit without digging again
+  cobble=32;
+  const second=await dropItemsSafe({slot:0,wholeStack:true},{call,mine,sleep:async()=>{}});
+  assert.equal(second.dropped,32);
+  assert.equal(second.method,'existing_pit');
+  assert.equal(dug.length,3);
 });

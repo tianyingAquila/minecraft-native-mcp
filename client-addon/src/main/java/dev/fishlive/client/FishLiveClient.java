@@ -104,6 +104,24 @@ public final class FishLiveClient implements ClientModInitializer {
             p.connection.send(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Rot(p.getYRot(),p.getXRot(),p.onGround(),p.horizontalCollision));
             boolean sent=p.drop(false);JsonObject o=new JsonObject();o.addProperty("offered",sent);return o;
         }));
+        router.register("fish.dropAimed",ctx->ClientMc.call(()->{
+            Gates.playerControl();var p=ClientMc.player();
+            int slot=ctx.getInt("slot");
+            boolean whole=!ctx.has("wholeStack")||ctx.optBoolean("wholeStack");
+            int count=Math.max(1,Math.min(64,ctx.optInt("count",1)));
+            equip(slot,7);
+            if(p.getMainHandItem().isEmpty())throw RpcException.badRequest("Selected slot is empty.");
+            lookAt(new Vec3(ctx.getDouble("x"),ctx.getDouble("y"),ctx.getDouble("z")));
+            p.connection.send(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket.Rot(p.getYRot(),p.getXRot(),p.onGround(),p.horizontalCollision));
+            int dropped=0;
+            if(whole){
+                int before=p.getMainHandItem().getCount();
+                if(p.drop(true))dropped=before;
+            }else{
+                for(int i=0;i<count&&!p.getMainHandItem().isEmpty();i++)if(p.drop(false))dropped++;
+            }
+            JsonObject o=new JsonObject();o.addProperty("dropped",dropped);return o;
+        }));
         router.register("fish.hudStatus",ctx->ClientMc.call(FishHud::status));
         router.register("fish.actionStart",ctx->ClientMc.call(FishActionObservation::begin));
         router.register("fish.actionFinish",ctx->ClientMc.call(FishActionObservation::finish));
