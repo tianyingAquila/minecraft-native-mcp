@@ -72,3 +72,36 @@ test('向上阶梯清除起步头顶并正常跳上，危险头顶不盲挖',asy
   assert.equal(r.completedSteps,0);assert.equal(danger.calls.some(([m])=>m==='interact.breakBlock'),false);
  }
 });
+
+test('隔墙或隔层敌对生物不误打断矿道，无遮挡近敌才中断；下行遇空落脚先挖通再垫块',async()=>{
+ const w=world();
+ const baseCall=w.call;
+ w.call=async(m,a={})=>{
+  if(m==='perception.entities')return {entities:[{type:'minecraft:creeper',distance:4.5,x:0.5,y:64,z:4.5}]};
+  return baseCall(m,a);
+ };
+ const occluded=await digTunnel({direction:'east',length:2},w);
+ assert.equal(occluded.status,'completed');assert.equal(occluded.completedSteps,2);
+
+ const wOpen=world();
+ const baseOpen=wOpen.call;
+ wOpen.call=async(m,a={})=>{
+  if(m==='perception.entities')return {entities:[{type:'minecraft:creeper',distance:2.0,x:2.5,y:64,z:0.5}]};
+  return baseOpen(m,a);
+ };
+ const closeHit=await digTunnel({direction:'east',length:2},wOpen);
+ assert.equal(closeHit.reason,'hostile_nearby');assert.equal(closeHit.completedSteps,0);
+
+ const down=world({slope:'down',obstacle:p=>p.x===1&&p.y===62&&p.z===0?{air:true,fullSupport:false,id:'minecraft:air'}:{}});
+ let placed=false;
+ const downCall=down.call;
+ down.call=async(m,a={})=>{
+  const res=await downCall(m,a);
+  if((m==='fish.probeBlocks'||m==='perception.blocks')&&placed){
+   return {blocks:res.blocks.map(b=>b.x===1&&b.y===62&&b.z===0?{...b,air:false,fullSupport:true,id:'minecraft:cobblestone'}:b)};
+  }
+  return res;
+ };
+ const rDown=await digTunnel({direction:'east',length:1,slope:'down'},{...down,placeFloor:async pos=>{assert.ok(down.calls.some(([m])=>m==='interact.breakBlock'));placed=true;return {block:'minecraft:cobblestone',position:pos};}});
+ assert.equal(rDown.status,'completed');assert.equal(rDown.placedFloors,1);
+});

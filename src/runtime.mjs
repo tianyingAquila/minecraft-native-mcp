@@ -90,26 +90,31 @@ export class Runtime {
     this.prepareTask = (async () => {
       try {
         if(requireModel){
-          this.store.reason='正在核对 DSH 的 DeepSeek API 配置与余额。';
           const fallback = bailianFallbackConfig();
-          try {
-            const balance=await this.refreshBalance();
-            if(!balance.available||balance.micros<1000000){
+          if (process.env.FISH_MODEL_PROVIDER === "bailian" && fallback) {
+            this.store.modelProvider = "bailian";
+            this.store.event("已按配置直接使用阿里云百炼 " + fallback.model + "。");
+          } else {
+            this.store.reason='正在核对 DSH 的 DeepSeek API 配置与余额。';
+            try {
+              const balance=await this.refreshBalance();
+              if(!balance.available||balance.micros<1000000){
+                if (fallback) {
+                  this.store.modelProvider = "bailian";
+                  this.store.event("官方 DeepSeek 余额不足 ¥1，已切换至阿里云百炼 " + fallback.model + "。");
+                } else {
+                  throw new Error('DeepSeek 账户不可用或余额不足 ¥1，请在 DSH 配置官方API凭据并充值。');
+                }
+              } else {
+                this.store.modelProvider = "official";
+              }
+            } catch (e) {
               if (fallback) {
                 this.store.modelProvider = "bailian";
-                this.store.event("官方 DeepSeek 余额不足 ¥1，已切换至阿里云百炼 " + fallback.model + "。");
+                this.store.event("官方余额检查失败，已切换至阿里云百炼 " + fallback.model + "：" + e.message);
               } else {
-                throw new Error('DeepSeek 账户不可用或余额不足 ¥1，请在 DSH 配置官方API凭据并充值。');
+                throw e;
               }
-            } else {
-              this.store.modelProvider = "official";
-            }
-          } catch (e) {
-            if (fallback) {
-              this.store.modelProvider = "bailian";
-              this.store.event("官方余额检查失败，已切换至阿里云百炼 " + fallback.model + "：" + e.message);
-            } else {
-              throw e;
             }
           }
         }
@@ -218,6 +223,9 @@ export class Runtime {
     if (this.pauseTask) await this.pauseTask;
     if (!this.mcp.client) await this.prepare();
     const fallback = bailianFallbackConfig();
+    if (process.env.FISH_MODEL_PROVIDER === "bailian" && fallback) {
+      this.store.modelProvider = "bailian";
+    }
     if (this.store.modelProvider !== "bailian") {
       try {
         await this.refreshBalance();

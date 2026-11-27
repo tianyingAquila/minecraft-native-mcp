@@ -24,7 +24,39 @@ export async function digTunnel(args, {call, signal, discover, placeFloor, equip
     if (self.gameMode!=='survival' || self.dimension!==initial.dimension) stop('player_state_changed');
     if (self.health<initial.health-.1 || self.health<=10 || (self.air??300)<100 || self.inWater) stop('player_danger');
     const nearby=await call('perception.entities', {radius:6, kinds:['hostile']});
-    if (nearby.entities.some(e=>e.distance<6)) stop('hostile_nearby');
+    const closeHostiles=(nearby.entities||[]).filter(e=>e.distance<6 && Math.abs((e.y??self.y)-self.y)<=2.6);
+    if (closeHostiles.length) {
+      let threat=closeHostiles.find(e=>e.distance<2.6 || e.x===undefined || e.z===undefined);
+      if (!threat) {
+        for (const e of closeHostiles) {
+          const samples=[0.3, 0.5, 0.7].flatMap(t => {
+            const sx=Math.floor(self.x+(e.x-self.x)*t);
+            const sy=Math.floor((self.y+0.5)+((e.y??self.y)-self.y)*t);
+            const sz=Math.floor(self.z+(e.z-self.z)*t);
+            return [{x:sx,y:sy,z:sz},{x:sx,y:sy+1,z:sz}];
+          });
+          const wall=(await call('fish.probeBlocks', {positions:samples})).blocks||[];
+          let blockedByWall=false;
+          for (let i=0;i<wall.length;i+=2) {
+            const lo=wall[i], hi=wall[i+1];
+            if (lo?.loaded && lo.fullSupport && !lo.air && hi?.loaded && hi.fullSupport && !hi.air) {
+              blockedByWall=true; break;
+            }
+          }
+          if (!blockedByWall) { threat=e; break; }
+        }
+      }
+      if (threat) {
+        stop('hostile_nearby', {
+          hostile: {
+            type: threat.type,
+            distance: Number((threat.distance??0).toFixed(1)),
+            ...(threat.x!==undefined ? {x:Math.floor(threat.x), y:Math.floor(threat.y??self.y), z:Math.floor(threat.z)} : {}),
+          },
+          message: '通道内近处出现无遮挡敌对生物，已停止挖掘。',
+        });
+      }
+    }
     const blocks=(await call('fish.probeBlocks', {positions:stepPositions})).blocks;
     if (blocks.length!==stepPositions.length || blocks.some(b=>!b.loaded)) stop('unloaded_area');
     if (blocks.some(b=>b.fluid || HAZARD.test(b.id))) stop('fluid_or_hazard');
@@ -88,24 +120,36 @@ export async function digTunnel(args, {call, signal, discover, placeFloor, equip
       for(let x=feet.x-1;x<=feet.x+1;x++)for(let z=feet.z-1;z<=feet.z+1;z++)for(let y=feet.y-1;y<=top+1;y++)stepPositions.push({x,y,z});
       const initialProbe = await guard({ allowEmptyFloor: Boolean(placeFloor), requirePickaxe: false });
       const initialSupport = initialProbe.find(b=>same(b,floor));
-      if ((!initialSupport?.fullSupport || initialSupport.falling) && initialSupport?.air && placeFloor) {
+      let needsFloorPlacement = Boolean((!initialSupport?.fullSupport || initialSupport.falling) && initialSupport?.air && placeFloor);
+      if (needsFloorPlacement && slope !== 'down') {
         try {
           await placeFloor(floor);
           result.placedFloors = (result.placedFloors || 0) + 1;
+          needsFloorPlacement = false;
         } catch (placeErr) {
           signal?.throwIfAborted();
           stop('unsupported_floor', { missingFloor: floor, message: `前方落脚格(${floor.x},${floor.y},${floor.z})为空且自动垫块失败：${placeErr.message}` });
         }
       }
       for (const pos of cut) {
-        const blocks=await guard({ requirePickaxe: false }), block=blocks.find(b=>same(b,pos));
+        const blocks=await guard({ allowEmptyFloor: needsFloorPlacement, requirePickaxe: false }), block=blocks.find(b=>same(b,pos));
         if (!block.air) {
-          await guard({ requirePickaxe: true });
-          const broke=await mineBlock(call,pos,{signal,check:() => guard({ requirePickaxe: true }),sleep});
+          await guard({ allowEmptyFloor: needsFloorPlacement, requirePickaxe: true });
+          const broke=await mineBlock(call,pos,{signal,check:() => guard({ allowEmptyFloor: needsFloorPlacement, requirePickaxe: true }),sleep});
           result.brokenBlocks++;
           if (/_ore$|ancient_debris$/.test(broke.broke)) result.encountered.push({id:broke.broke,position:pos});
           await call('fish.cancel');
           await checkDiscovery();
+        }
+      }
+      if (needsFloorPlacement) {
+        try {
+          await placeFloor(floor);
+          result.placedFloors = (result.placedFloors || 0) + 1;
+          needsFloorPlacement = false;
+        } catch (placeErr) {
+          signal?.throwIfAborted();
+          stop('unsupported_floor', { missingFloor: floor, message: `前方落脚格(${floor.x},${floor.y},${floor.z})为空且自动垫块失败：${placeErr.message}` });
         }
       }
       const beforeWalk=await guard({ requirePickaxe: false });
