@@ -71,6 +71,12 @@ public final class FishAssistance {
                         if(target.equals("lava_lake")) {
                             search=new LavaSearch(root,id,result,level,player.blockPosition(),radius,deadline,out);return;
                         }
+                        if(target.equals("iron_ore")||target.equals("diamond_ore")||target.equals("gold_ore")||target.equals("coal_ore")||target.equals("obsidian")||target.equals("ancient_debris")) {
+                            if(target.equals("ancient_debris")&&!dimension.equals("minecraft:the_nether"))throw new IllegalStateException("Ancient debris search is only available in the nether");
+                            if((target.equals("iron_ore")||target.equals("diamond_ore")||target.equals("coal_ore"))&&!dimension.equals("minecraft:overworld"))throw new IllegalStateException("This ore search is only available in the overworld");
+                            if(target.equals("gold_ore")&&!dimension.equals("minecraft:overworld")&&!dimension.equals("minecraft:the_nether"))throw new IllegalStateException("Gold ore search is only available in the overworld or nether");
+                            search=new OreSearch(root,id,result,level,player.blockPosition(),target,Math.min(96,radius),deadline,out);return;
+                        }
                         if(target.equals("end_portal")) {
                             if(!dimension.equals("minecraft:overworld"))throw new IllegalStateException("End portal search is only available in the overworld");
                             search=new EndPortalSearch(root,id,result,level,player.blockPosition(),radius,deadline,out);return;
@@ -253,6 +259,139 @@ public final class FishAssistance {
             }
             out.addProperty("loadedTerrainOnly",true);
             out.addProperty("note","Assisted search of loaded overworld chunks for end portal frames; approach stronghold first if not loaded yet.");
+            write(result,out);return true;
+        }
+    }
+
+    /** Scan loaded chunks incrementally for nearest ore veins or obsidian with exact 3D coordinates. */
+    private static final class OreSearch implements IncrementalSearch {
+        private static final class Vein {
+            BlockPos pos;String block;double distSqr;int size=1;
+            Vein(BlockPos pos,String block,double distSqr){this.pos=pos;this.block=block;this.distSqr=distSqr;}
+        }
+        final Path root,result;final String id,target;final ServerLevel level;final BlockPos origin;final long deadline;final JsonObject out;
+        final ArrayList<int[]> chunks=new ArrayList<>();final ArrayList<Vein> veins=new ArrayList<>();
+        final int low,top,height;int chunk=0,cell=0,probes=0;
+        final BlockPos.MutableBlockPos cursor=new BlockPos.MutableBlockPos();
+        OreSearch(Path root,String id,Path result,ServerLevel level,BlockPos origin,String target,int radius,long deadline,JsonObject out){
+            this.root=root;this.id=id;this.result=result;this.level=level;this.origin=origin;this.target=target;this.deadline=deadline;this.out=out;
+            int minY=level.getMinY(),maxY=level.getMaxY();
+            boolean nether=level.dimension()==net.minecraft.world.level.Level.NETHER;
+            this.low=switch(target){
+                case "diamond_ore"->Math.max(minY+1,-64);
+                case "iron_ore"->Math.max(minY+1,-64);
+                case "gold_ore"->nether?10:Math.max(minY+1,-64);
+                case "coal_ore"->Math.max(minY+1,0);
+                case "ancient_debris"->8;
+                default->Math.max(minY+1,-64);
+            };
+            this.top=switch(target){
+                case "diamond_ore"->Math.min(maxY-1,16);
+                case "iron_ore"->Math.min(maxY-1,128);
+                case "gold_ore"->nether?118:Math.min(maxY-1,32);
+                case "coal_ore"->Math.min(maxY-1,160);
+                case "ancient_debris"->30;
+                default->Math.min(maxY-1,128);
+            };
+            this.height=Math.max(1,this.top-this.low+1);
+            int cx=origin.getX()>>4,cz=origin.getZ()>>4,r=(radius+15)/16;
+            for(int dx=-r;dx<=r;dx++)for(int dz=-r;dz<=r;dz++)chunks.add(new int[]{cx+dx,cz+dz});
+            chunks.sort(Comparator.comparingDouble(this::lowerBound));
+            out.addProperty("radius",radius);out.addProperty("target",target);
+        }
+        boolean matches(net.minecraft.world.level.block.state.BlockState s){
+            return switch(target){
+                case "iron_ore"->s.is(Blocks.IRON_ORE)||s.is(Blocks.DEEPSLATE_IRON_ORE);
+                case "diamond_ore"->s.is(Blocks.DIAMOND_ORE)||s.is(Blocks.DEEPSLATE_DIAMOND_ORE);
+                case "gold_ore"->s.is(Blocks.GOLD_ORE)||s.is(Blocks.DEEPSLATE_GOLD_ORE)||s.is(Blocks.NETHER_GOLD_ORE);
+                case "coal_ore"->s.is(Blocks.COAL_ORE)||s.is(Blocks.DEEPSLATE_COAL_ORE);
+                case "obsidian"->s.is(Blocks.OBSIDIAN);
+                case "ancient_debris"->s.is(Blocks.ANCIENT_DEBRIS);
+                default->false;
+            };
+        }
+        void recordHit(BlockPos pos,String blockId,double distSqr){
+            for(Vein v:veins){
+                if(Math.abs(v.pos.getX()-pos.getX())+Math.abs(v.pos.getY()-pos.getY())+Math.abs(v.pos.getZ()-pos.getZ())<=4){
+                    v.size++;
+                    if(distSqr<v.distSqr){v.pos=pos;v.block=blockId;v.distSqr=distSqr;}
+                    return;
+                }
+            }
+            if(veins.size()<12){
+                veins.add(new Vein(pos,blockId,distSqr));
+                veins.sort(Comparator.comparingDouble(v->v.distSqr));
+            } else if(distSqr<veins.get(veins.size()-1).distSqr){
+                veins.set(veins.size()-1,new Vein(pos,blockId,distSqr));
+                veins.sort(Comparator.comparingDouble(v->v.distSqr));
+            }
+        }
+        public boolean step()throws Exception {
+            if(Files.exists(root.resolve(id+".cancel"))){Files.deleteIfExists(root.resolve(id+".cancel"));return true;}
+            boolean timedOut=System.currentTimeMillis()>deadline;
+            if(!timedOut&&chunk<chunks.size()){
+                int[] c=chunks.get(chunk);var terrain=level.getChunkSource().getChunkNow(c[0],c[1]);
+                if(terrain==null){chunk++;cell=0;return false;}
+                for(int n=0;n<4096&&cell<256*height;n++,cell++){
+                    int column=cell/height,y=low+cell%height,x=c[0]*16+column%16,z=c[1]*16+column/16;
+                    cursor.set(x,y,z);probes++;
+                    var state=terrain.getBlockState(cursor);
+                    if(!matches(state))continue;
+                    double d=cursor.distSqr(origin);
+                    String blockId=BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+                    recordHit(cursor.immutable(),blockId,d);
+                }
+                if(cell>=256*height){
+                    chunk++;cell=0;
+                    if(veins.size()>=6&&(chunk>=chunks.size()||lowerBound(chunks.get(chunk))>=veins.get(5).distSqr))return finish(false);
+                }
+                return false;
+            }
+            return finish(timedOut);
+        }
+        double lowerBound(int[] c){
+            double x=Math.max(c[0]*16,Math.min(origin.getX(),c[0]*16+15)),z=Math.max(c[1]*16,Math.min(origin.getZ(),c[1]*16+15));
+            double dy=origin.getY()<low?low-origin.getY():(origin.getY()>top?origin.getY()-top:0);
+            return Math.pow(x-origin.getX(),2)+Math.pow(z-origin.getZ(),2)+dy*dy;
+        }
+        boolean hasAdjacentLava(BlockPos pos){
+            BlockPos[] dirs={pos.above(),pos.below(),pos.north(),pos.south(),pos.east(),pos.west()};
+            for(BlockPos nb:dirs){
+                if(!level.hasChunkAt(nb))continue;
+                if(level.getFluidState(nb).getType()==Fluids.LAVA)return true;
+            }
+            return false;
+        }
+        boolean finish(boolean limited)throws Exception {
+            var ranked=new ArrayList<Vein>(veins);
+            ranked.sort((a,b)->{
+                boolean la=hasAdjacentLava(a.pos),lb=hasAdjacentLava(b.pos);
+                if(la!=lb)return la?1:-1;
+                return Double.compare(a.distSqr,b.distSqr);
+            });
+            JsonArray list=new JsonArray();
+            for(Vein v:ranked.stream().limit(6).toList()){
+                JsonObject row=position(v.pos);
+                row.addProperty("block",v.block);
+                row.addProperty("veinSize",v.size);
+                row.addProperty("distance",Math.round(Math.sqrt(v.distSqr)*10.0)/10.0);
+                row.addProperty("nearLava",hasAdjacentLava(v.pos));
+                list.add(row);
+            }
+            out.addProperty("found",!ranked.isEmpty());
+            out.addProperty("limited",limited||chunk<chunks.size());
+            out.addProperty("blocksChecked",probes);
+            out.add("candidates",list);
+            if(!ranked.isEmpty()){
+                Vein best=ranked.get(0);
+                out.add("position",position(best.pos));
+                out.addProperty("block",best.block);
+                out.addProperty("veinSize",best.size);
+                out.addProperty("nearLava",hasAdjacentLava(best.pos));
+                out.addProperty("distance",Math.round(Math.sqrt(best.distSqr)*10.0)/10.0);
+            }
+            out.addProperty("loadedTerrainOnly",true);
+            out.addProperty("note","Assisted x-ray search of loaded chunks for exact 3D ore coordinates; call dig_to_position(x,y,z,mineTarget:true) to tunnel safely and mine the vein.");
             write(result,out);return true;
         }
     }

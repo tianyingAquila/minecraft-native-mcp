@@ -28,18 +28,22 @@ export async function assistanceQuery(call,target,{radius=96,structureChunks=32,
  }
 }
 
+const EXACT_3D_TARGETS=new Set(['lava_lake','blaze_spawner','end_portal','iron_ore','diamond_ore','gold_ore','coal_ore','obsidian','ancient_debris']);
+const ORE_TARGETS=new Set(['iron_ore','diamond_ore','gold_ore','coal_ore','obsidian','ancient_debris']);
+const ALL_TARGETS=new Set(['lava_lake','iron_ore','diamond_ore','gold_ore','coal_ore','obsidian','ancient_debris','nether_fortress','village','ruined_portal','stronghold','blaze_spawner','end_portal','piglin','blaze','enderman']);
+
 export async function locateResource(args,{call,signal}={}) {
  const target=args.target;
- if(!['lava_lake','nether_fortress','village','ruined_portal','stronghold','blaze_spawner','end_portal','piglin','blaze','enderman'].includes(target))throw Error('请选择岩浆湖、地狱堡垒、烈焰人刷怪笼、村庄、废弃传送门、末地要塞、末地传送门或猪灵/烈焰人/末影人。');
- const radius=args.radius??96,structureChunks=args.structureChunks??32;
- if(!Number.isInteger(radius)||radius<16||radius>256||!Number.isInteger(structureChunks)||structureChunks<1||structureChunks>64)throw Error('生物/岩浆/刷怪笼/末地门搜索16–256格，结构搜索1–64个区块。');
+ if(!ALL_TARGETS.has(target))throw Error('请选择矿石(iron_ore/diamond_ore/gold_ore/coal_ore/obsidian/ancient_debris)、岩浆湖、地狱堡垒、烈焰人刷怪笼、村庄、废弃传送门、末地要塞、末地传送门或猪灵/烈焰人/末影人。');
+ const radius=args.radius??(ORE_TARGETS.has(target)?48:96),structureChunks=args.structureChunks??32;
+ if(!Number.isInteger(radius)||radius<16||radius>256||!Number.isInteger(structureChunks)||structureChunks<1||structureChunks>64)throw Error('生物/矿石/岩浆/刷怪笼/末地门搜索16–256格，结构搜索1–64个区块。');
  if(['piglin','blaze','enderman'].includes(target)) {
   const result=await assistanceQuery(call,'entities',{radius,signal});
   const entities=result.entities.filter(e=>e.type==='minecraft:'+target&&(e.health??1)>0&&!(target==='piglin'&&e.baby)).slice(0,5);
   return {source:result.source,dimension:result.dimension,target,found:entities.length>0,radius,entities,note:'只查询当前已加载的生物；未找到不代表更远处没有。坐标不是安全路线。'};
  }
- const result=await assistanceQuery(call,target,{radius,structureChunks,signal});
- if(!['lava_lake','blaze_spawner','end_portal'].includes(target)&&result.position){
+ const result=await assistanceQuery(call,target,{radius:ORE_TARGETS.has(target)?Math.min(96,radius):radius,structureChunks,signal});
+ if(!EXACT_3D_TARGETS.has(target)&&result.position){
   // Vanilla structure locators often return Y=0, which is not an entrance.
   const {x,z}=result.position;result.position={x,z};result.heightKnown=false;delete result.distance;
   const extra=target==='stronghold'?'抵达附近后可用locate_resource(target="end_portal")直接获取末地传送门精确三维坐标。':target==='nether_fortress'?'抵达附近后可用locate_resource(target="blaze_spawner")直接查找周围烈焰人刷怪笼精确坐标。':'';

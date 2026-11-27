@@ -82,6 +82,15 @@ export async function fightEntity(args,{call,signal,now=Date.now,sleep=ms=>delay
    let needsApproach=distance>2.5;
    if(!needsApproach){
     if(navigating){await call('fish.cancel');navigating=false;}
+    if(!weapon.held){
+     const preInv=await call('player.getInventory');
+     const preHeld=[...(preInv.hotbar||[]),...(preInv.main||[])].find(i=>i.slot===preInv.selectedSlot);
+     if(preHeld?.id!==weapon.id){
+      const found=[...(preInv.hotbar||[]),...(preInv.main||[])].find(i=>i.id===weapon.id);
+      if(!found)return finish('weapon_changed_or_broken');
+      await call('fish.equip',{slot:found.slot,hotbarSlot:7});
+     }
+    }
     try{
      const hit=await call('fish.attack',{uuid:args.uuid});
      if(hit.deathObserved)return await defeated();
@@ -102,8 +111,12 @@ export async function fightEntity(args,{call,signal,now=Date.now,sleep=ms=>delay
    }
    if(!lastPosition||Math.hypot(self.x-lastPosition.x,self.y-lastPosition.y,self.z-lastPosition.z)>.35){lastPosition={x:self.x,y:self.y,z:self.z};movedAt=now();}
    if(now()-movedAt>6500&&now()-lastAttackAt>6500)return finish(result.lastApproachProblem==='line_of_sight'?'no_clear_approach':'no_progress');
-   const inventory=await call('player.getInventory'),held=[...(inventory.hotbar||[]),...(inventory.main||[])].find(i=>i.slot===inventory.selectedSlot);
-   if(!weapon.held&&held?.id!==weapon.id)return finish('weapon_changed_or_broken');
+   const inventory=await call('player.getInventory'),allItems=[...(inventory.hotbar||[]),...(inventory.main||[])],held=allItems.find(i=>i.slot===inventory.selectedSlot);
+   if(!weapon.held&&held?.id!==weapon.id){
+    const stillInBag=allItems.find(i=>i.id===weapon.id);
+    if(!stillInBag)return finish('weapon_changed_or_broken');
+    if(!navigating)await call('fish.equip',{slot:stillInBag.slot,hotbarSlot:7});
+   }
    if(held?.maxDamage&&/diamond|netherite/.test(held.id||'')&&held.maxDamage-(held.damage||0)<=3)return finish('weapon_nearly_broken');
    await sleep(150);
   }

@@ -28,7 +28,8 @@ async function inspectDropEnvironment(call, px, py, pz) {
   const blocks = (await call('fish.probeBlocks', {positions})).blocks || [];
   let existingPit = null;
   let openDir = null;
-  let digCandidate = null;
+  let wallDigCandidate = null;
+  let floorDigCandidate = null;
 
   for (let i = 0; i < DIRS.length; i++) {
     const [dx, dz] = DIRS[i];
@@ -43,13 +44,20 @@ async function inspectDropEnvironment(call, px, py, pz) {
     if (!openDir && d1t?.air && d1m?.air && d2t?.air && d2m?.air && d3t?.air && d3m?.air) {
       openDir = {dx, dz};
     }
-    // 3. Diggable side pit at dist=1 (wallEye + pitTop + pitBottom)
-    if (!digCandidate && safeDiggable(d1t) && safeDiggable(d1m) && safeDiggable(d1b)) {
+    // 3. Diggable side pit at dist=1: prefer digging into a solid side wall over digging a hole in the walkway floor
+    if (safeDiggable(d1t) && safeDiggable(d1m) && safeDiggable(d1b)) {
       const toDig = [d1t, d1m, d1b].filter(b => !b.air);
-      digCandidate = {dx, dz, x: px + dx, y: py - 1, z: pz + dz, toDig};
+      if (toDig.length) {
+        const cand = {dx, dz, x: px + dx, y: py - 1, z: pz + dz, toDig};
+        if (!d1m.air || !d1t.air) {
+          if (!wallDigCandidate) wallDigCandidate = cand;
+        } else if (!floorDigCandidate) {
+          floorDigCandidate = cand;
+        }
+      }
     }
   }
-  return {existingPit, openDir, digCandidate};
+  return {existingPit, openDir, digCandidate: wallDigCandidate || floorDigCandidate};
 }
 
 async function performAimedDrop(call, {slot, dropWhole, expected, aim}, sleep) {
@@ -144,13 +152,6 @@ export async function dropItemsSafe(
       y: py + 0.1,
       z: env.existingPit.z + 0.5 + env.existingPit.dz * 0.2,
     };
-  } else if (env.openDir) {
-    method = 'open_throw';
-    aim = {
-      x: self.x + env.openDir.dx * 4,
-      y: self.y + 1.9,
-      z: self.z + env.openDir.dz * 4,
-    };
   } else if (env.digCandidate && !self.inWater && !self.inLava) {
     await digSidePit(call, env.digCandidate, {mine, signal, sleep});
     method = 'dug_pit';
@@ -160,6 +161,13 @@ export async function dropItemsSafe(
       x: env.digCandidate.x + 0.5 + env.digCandidate.dx * 0.2,
       y: py + 0.1,
       z: env.digCandidate.z + 0.5 + env.digCandidate.dz * 0.2,
+    };
+  } else if (env.openDir) {
+    method = 'open_throw';
+    aim = {
+      x: self.x + env.openDir.dx * 4,
+      y: self.y + 1.9,
+      z: self.z + env.openDir.dz * 4,
     };
   } else {
     aim = {x: self.x + 3, y: self.y + 1.8, z: self.z};

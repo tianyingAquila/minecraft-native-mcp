@@ -6,6 +6,7 @@ import {buildEnclosurePlan,farmBlazeSpawner} from '../src/blaze-farm.mjs';
 import {recoverPosition} from '../src/recovery.mjs';
 import {dropItemsSafe} from '../src/drop.mjs';
 import {mineBlock} from '../src/mining.mjs';
+import {digToPosition} from '../src/dig-to.mjs';
 import {filterAgentTools} from '../src/agent.mjs';
 
 test('returnToSurface 在露天位置直接返回成功；在地下自动选安全方向挖阶梯直到露天',async()=>{
@@ -250,4 +251,103 @@ test('mineBlock 挖普通石头/深板岩时优先用石镐保护铁镐和钻石
   assert.equal(await runFor('minecraft:stone'),1);
   assert.equal(await runFor('minecraft:deepslate_diamond_ore'),0);
   assert.equal(await runFor('minecraft:obsidian'),0);
+});
+
+test('digToPosition 自动沿阶梯定点抵达目标，避开岩浆障碍并按 mineTarget 采掉整条相连钻石矿脉',async()=>{
+  let self={x:0.5,y:10,z:0.5,dimension:'minecraft:overworld',health:20,inWater:false,inLava:false,onGround:true};
+  let diamonds=0;
+  const veinKeys=new Set(['6,4,0','7,4,0','7,3,0']);
+  const mined=[];
+  const digCalls=[];
+  let blockedFirst=false;
+  const call=async(method,args={})=>{
+    if(method==='player.getState')return {...self};
+    if(method==='player.getInventory')return {hotbar:diamonds>0?[{slot:0,id:'minecraft:diamond',count:diamonds}]:[],main:[]};
+    if(method==='fish.probeBlocks'){
+      return {blocks:args.positions.map(p=>{
+        const k=`${p.x},${p.y},${p.z}`;
+        if(veinKeys.has(k))return {...p,loaded:true,air:false,fluid:false,hardness:3,id:'minecraft:deepslate_diamond_ore'};
+        return {...p,loaded:true,air:false,fluid:false,hardness:1.5,id:'minecraft:deepslate'};
+      })};
+    }
+    return {};
+  };
+  const dig=async({direction,slope,length})=>{
+    digCalls.push({direction,slope,length});
+    if(!blockedFirst&&direction==='east'&&slope==='down'){
+      blockedFirst=true;
+      return {status:'interrupted',reason:'fluid_or_hazard',completedSteps:0,brokenBlocks:0};
+    }
+    const vec={north:[0,-1],south:[0,1],east:[1,0],west:[-1,0]}[direction];
+    self.x+=vec[0]*length;
+    self.z+=vec[1]*length;
+    if(slope==='down')self.y-=length;
+    if(slope==='up')self.y+=length;
+    return {status:'completed',reason:'requested_length_reached',completedSteps:length,brokenBlocks:length*3};
+  };
+  const mine=async(_c,pos)=>{
+    mined.push(pos);
+    veinKeys.delete(`${pos.x},${pos.y},${pos.z}`);
+    diamonds++;
+    return {broke:'minecraft:deepslate_diamond_ore',position:pos};
+  };
+  let clock=0;
+  const res=await digToPosition({x:6,y:4,z:0,mineTarget:true},{call,dig,mine,now:()=>clock,sleep:async ms=>{clock+=ms;}});
+  assert.equal(res.status,'succeeded');
+  assert.equal(res.reason,'arrived_and_mined');
+  assert.equal(res.reached,true);
+  assert.equal(res.veinFound,3);
+  assert.equal(res.minedBlocks,3);
+  assert.equal(res.gainedItem,'minecraft:diamond');
+  assert.equal(res.gainedCount,3);
+  assert.ok(digCalls.length>=2);
+  assert.equal(mined.length,3);
+});
+
+test('digToPosition 采矿遇到挡路石(first hit)时自动先清障再采目标矿石；dropItemsSafe 在直线通道中优先侧边挖坑而非往走廊扔',async()=>{
+  let self={x:5.5,y:4,z:0.5,dimension:'minecraft:overworld',health:20,inWater:false,inLava:false,onGround:true};
+  let diamonds=0, blockerBroken=false;
+  const call=async(method,args={})=>{
+    if(method==='player.getState')return {...self};
+    if(method==='player.getInventory')return {hotbar:diamonds>0?[{slot:0,id:'minecraft:diamond',count:diamonds}]:[],main:[]};
+    if(method==='fish.probeBlocks'){
+      return {blocks:args.positions.map(p=>{
+        if(p.x===6&&p.y===4&&p.z===0)return {...p,loaded:true,air:false,fluid:false,hardness:3,id:'minecraft:deepslate_diamond_ore'};
+        return {...p,loaded:true,air:false,fluid:false,hardness:1.5,id:'minecraft:deepslate'};
+      })};
+    }
+    return {};
+  };
+  const mine=async(_c,pos)=>{
+    if(pos.x===6&&pos.y===4&&pos.z===0&&!blockerBroken){
+      throw new Error('Block or requested face is obstructed; first hit minecraft:deepslate @ 6, 4, 1; target 6, 4, 0');
+    }
+    if(pos.x===6&&pos.y===4&&pos.z===1){blockerBroken=true;return {broke:'minecraft:deepslate',position:pos};}
+    diamonds++;
+    return {broke:'minecraft:deepslate_diamond_ore',position:pos};
+  };
+  const res=await digToPosition({x:6,y:4,z:0,mineTarget:true},{call,dig:async()=>({status:'completed',completedSteps:0}),mine,now:()=>0,sleep:async()=>{}});
+  assert.equal(res.status,'succeeded');
+  assert.equal(blockerBroken,true);
+  assert.equal(res.minedBlocks,1);
+  assert.equal(res.gainedCount,1);
+
+  // Corridor open along east (dx=1), solid stone on north/south/west: must dig side pit instead of open_throw
+  let cobble=32;
+  const dug=[];
+  const dropCall=async(method,args={})=>{
+    if(method==='player.getState')return {x:0.5,y:10,z:0.5,dimension:'minecraft:overworld',health:20,inWater:false,inLava:false,onGround:true};
+    if(method==='player.getInventory')return {hotbar:cobble>0?[{slot:0,id:'minecraft:cobblestone',count:cobble}]:[],main:[]};
+    if(method==='fish.probeBlocks'){
+      return {blocks:args.positions.map(p=>{
+        const corridor=p.z===0&&p.x>=1&&(p.y===10||p.y===11);
+        return {...p,loaded:true,air:corridor,fluid:false,blockEntity:false,falling:false,hardness:corridor?0:1.5,fullSupport:!corridor,id:corridor?'minecraft:air':'minecraft:stone'};
+      })};
+    }
+    if(method==='fish.dropAimed'){cobble=0;return {dropped:32};}
+    return {};
+  };
+  const dropRes=await dropItemsSafe({slot:0,wholeStack:true},{call:dropCall,mine:async(_c,p)=>{dug.push(p);return {broke:'minecraft:stone',position:p};},sleep:async()=>{}});
+  assert.equal(dropRes.method,'dug_pit');
+  assert.ok(dug.length>=2);
 });

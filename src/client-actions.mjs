@@ -28,6 +28,7 @@ import {returnToSurface} from './surface.mjs';
 import {makeObsidian} from './obsidian.mjs';
 import {farmBlazeSpawner} from './blaze-farm.mjs';
 import {dropItemsSafe} from './drop.mjs';
+import {digToPosition} from './dig-to.mjs';
 const ALLOWED = new Set([
   "agent_brief",
   "observe",
@@ -92,7 +93,8 @@ const CUSTOM = [
   {name:'fight_dragon',description:'在末地中央附近从安全地面等待一轮末影龙落地，接近真实龙头并按冷却近战，起飞或遇危险后撤回出发点。返回实测扣血与撤离结果。weapon可用auto或已有近战武器。',inputSchema:schema({seconds:{type:'integer',minimum:10,maximum:120},weapon:{type:'string'}})},
   {name:'build_nether_portal',description:'在手边的四格平地建造并点燃地狱门。x/y/z是最下方转角，沿axis正方向展开四格。需10块普通黑曜石（需用钻石镐开采，铁镐不掉落黑曜石）、7块普通建筑块、镐和打火石，已有正确部分可续建。门框侧面留两格平地搭脚手。确认紫色门面后返回入口。',inputSchema:schema({...xyz,axis:{type:'string',enum:['x','z']}},['x','y','z','axis'])},
   {name:'cross_portal',description:'走进指定的已激活传送门并等待实际维度变化。传送成功后返回抵达坐标；用已观察到的传送门方块坐标，刚穿过门需注意冷却。',inputSchema:schema(xyz,['x','y','z'])},
-  {name:'locate_resource',description:'辅助查找岩浆源簇、地狱堡垒、烈焰人刷怪笼、村庄、废弃传送门、末地要塞、末地传送门，或已加载的成年猪灵/烈焰人/末影人；返回来源、有限搜索范围和坐标，不保证安全可达。主世界找末地门先查stronghold接近后再查end_portal，无需丢末影之眼；下界找烈焰人先查nether_fortress接近后再查blaze_spawner。按需查询，不连续重查相同区域。',inputSchema:schema({target:{type:'string',enum:['lava_lake','nether_fortress','blaze_spawner','village','ruined_portal','stronghold','end_portal','piglin','blaze','enderman']},radius:{type:'integer',minimum:16,maximum:256},structureChunks:{type:'integer',minimum:1,maximum:64}},['target'])},
+  {name:'locate_resource',description:'辅助查找最近矿石(iron_ore/diamond_ore/gold_ore/coal_ore/obsidian/ancient_debris，矿透精确三维坐标与矿脉大小)、岩浆湖、地狱堡垒、烈焰人刷怪笼、村庄、废弃传送门、末地要塞、末地传送门，或已加载的成年猪灵/烈焰人/末影人。找铁/钻石/黑曜石直接查后配dig_to_position直达采矿；找末地门先stronghold再end_portal；找烈焰人先nether_fortress再blaze_spawner。',inputSchema:schema({target:{type:'string',enum:['iron_ore','diamond_ore','gold_ore','coal_ore','obsidian','ancient_debris','lava_lake','nether_fortress','blaze_spawner','village','ruined_portal','stronghold','end_portal','piglin','blaze','enderman']},radius:{type:'integer',minimum:16,maximum:256},structureChunks:{type:'integer',minimum:1,maximum:64}},['target'])},
+  {name:'dig_to_position',description:'安全定点挖掘并到达指定三维坐标(x,y,z)。自动规划阶梯/平道与之字形上下路线并绕开岩浆、水与空洞，适合直接挖向locate_resource查到的铁矿、钻石矿、黑曜石、岩浆池、刷怪笼或传送门坐标；设mineTarget:true可在抵达后自动开采整条相连矿脉并拾取产物。',inputSchema:schema({...xyz,mineTarget:{type:'boolean'},reach:{type:'integer',minimum:1,maximum:4},seconds:{type:'integer',minimum:15,maximum:150}},['x','y','z'])},
   {name:'return_to_surface',description:'在主世界地下洞穴或矿道一键安全返回地表露天处。程序自动检查头顶是否已露天，未露天则自动选择避开水/岩浆的安全方向连续向上挖阶梯（自动垫台阶）直到见天或达到上限，避免手工算负坐标卡死。',inputSchema:schema({maxHeight:{type:'integer',minimum:4,maximum:120},seconds:{type:'integer',minimum:15,maximum:150},direction:{type:'string',enum:['auto','north','south','east','west']}})},
   {name:'make_obsidian',description:'安全浇灌岩浆并开采黑曜石（需先拥有钻石镐或下界合金镐；若附近只有岩浆则需水桶）。自动避开或浇水防掉烧，逐块挖取并确认背包增量。默认采集10块（足够建造地狱门）。',inputSchema:schema({count:{type:'integer',minimum:1,maximum:20},radius:{type:'integer',minimum:3,maximum:16},x:{type:'number'},y:{type:'number'},z:{type:'number'},seconds:{type:'integer',minimum:20,maximum:240}})},
   {name:'farm_blaze_spawner',description:'针对下界烈焰人刷怪笼（可省略x/y/z自动查找64格内刷怪笼），先自动用背包防火方块给刷怪笼封顶围笼（防止烈焰人飞天打不到），再在激活范围内守候击杀烈焰人并拾取烈焰棒，直到达到目标数量或超时。',inputSchema:schema({x:{type:'number'},y:{type:'number'},z:{type:'number'},targetRods:{type:'integer',minimum:1,maximum:24},seconds:{type:'integer',minimum:20,maximum:180},encloseOnly:{type:'boolean'}})},
@@ -591,6 +593,29 @@ export class ClientActions {
     const call = (method, params = {}) =>
       this.bridge.call(method, params, { signal });
     if(name==='locate_resource')return locateResource(args,{call,signal});
+    if(name==='dig_to_position') {
+      const placeFloor = async position => {
+        const inv = await call('player.getInventory');
+        const buildingIds = ['minecraft:cobblestone','minecraft:cobbled_deepslate','minecraft:dirt','minecraft:stone','minecraft:andesite','minecraft:diorite','minecraft:granite','minecraft:netherrack','minecraft:end_stone','minecraft:deepslate','minecraft:tuff'];
+        const stack = [...inv.hotbar,...inv.main].find(i => buildingIds.includes(i.id));
+        if (!stack) throw new Error('背包没有普通实心建筑方块可垫台阶');
+        return this.custom('place_block_at', {...position, item: stack.id}, signal);
+      };
+      const equip = slot => this.custom('equip_item', {slot}, signal);
+      const mergeInventory = async () => {
+        await call('fish.mergeInventory');
+        await delay(250, undefined, { signal });
+      };
+      try {
+        return await digToPosition(args, {
+          call,
+          signal,
+          dig: tunnelArgs => digTunnel(tunnelArgs, {call, signal, discover: null, placeFloor, equip, mergeInventory}),
+        });
+      } finally {
+        await this.bridge.call('fish.cancel').catch(() => {});
+      }
+    }
     if(name==='return_to_surface')return returnToSurface(args,{
       call,
       signal,
