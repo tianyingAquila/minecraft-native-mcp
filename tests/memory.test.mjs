@@ -18,25 +18,25 @@ function fixture(chatFn) {
   r.withFrozenGame=work=>Runtime.prototype.withFrozenGame.call(r,work);
   const a=new Agent(r,{chatFn,balanceFn:async()=>({micros:20000000,currency:'CNY',available:true,checkedAt:Date.now()})});
   a.controller=new AbortController();a.save=()=>{};a.load=()=>{};r.agent=a;
-  a.history=Array.from({length:6},(_,i)=>group('g'+i,120000));a.notes='回家补食物';a.memory='旧摘要：缺少食物';
+  a.history=Array.from({length:6},(_,i)=>group('g'+i,26000));a.notes='回家补食物';a.memory='旧摘要：缺少食物';
   return {a,r,events};
 }
 
 test('上下文用API实报校准增长；无实报用UTF8保守上界，不把base64当token',()=>{
-  assert.equal(CONTEXT_TRIGGER_TOKENS,500000);
+  assert.equal(CONTEXT_TRIGGER_TOKENS,100000);
   const body=bodyFor([group('a')]);
   body.messages.at(-1).content=[{type:'text',text:'图片待游戏决策查看'},{type:'image_url',image_url:{url:'data:image/png;base64,'+'A'.repeat(1000000)}}];
   const size=contextSize(body);assert.ok(size.textBytes<1000);assert.equal(size.imageTokens,1024);
-  const meter=measureContext(body,{prompt_tokens:480000});
-  assert.equal(contextPressure(body,meter).estimatedTokens,480000);
-  body.messages[0].content+='x'.repeat(21000);
-  assert.ok(contextPressure(body,meter).estimatedTokens>=500000);
+  const meter=measureContext(body,{prompt_tokens:90000});
+  assert.equal(contextPressure(body,meter).estimatedTokens,90000);
+  body.messages[0].content+='x'.repeat(12000);
+  assert.ok(contextPressure(body,meter).estimatedTokens>=100000);
   const summary=summaryRequest(body);assert.ok(!JSON.stringify(summary).includes('data:image/'));
   assert.equal(summary.tool_choice,'none');assert.ok(JSON.stringify(body).includes('data:image/'));
-  const longBody=bodyFor([group('long',2500000)]),retainedBody=bodyFor([group('recent',500000)]);
-  const afterCompaction={...measureContext(longBody,{prompt_tokens:500000}),afterCompaction:true};
+  const longBody=bodyFor([group('long',500000)]),retainedBody=bodyFor([group('recent',100000)]);
+  const afterCompaction={...measureContext(longBody,{prompt_tokens:100000}),afterCompaction:true};
   assert.equal(contextPressure(retainedBody,afterCompaction).basis,'density_after_compaction');
-  assert.ok(contextPressure(retainedBody,afterCompaction).estimatedTokens<200000,'整理后不应因字节回退立即再次整理');
+  assert.ok(contextPressure(retainedBody,afterCompaction).estimatedTokens<45000,'整理后不应因字节回退立即再次整理');
 });
 
 test('按完整工具组保留近期记录；摘要必须非空、非截断、无工具调用',()=>{
@@ -91,6 +91,25 @@ test('整理前余额不足不发付费请求，保存失败不替换原历史',
   a.balanceFn=async()=>({micros:20000000,currency:'CNY',available:true,checkedAt:Date.now()});
   a.save=()=>{throw new Error('磁盘写入失败');};
   await assert.rejects(a.compactContext(bodyFor(original)));assert.equal(a.history,original);assert.ok(!events.includes('server-resume'));
+});
+
+test('外部建议为空时不出现任何提示，设置后下轮出现且清空即消失',async()=>{
+  const seen=[];
+  const {a,r}=fixture(async body=>{
+    seen.push(String(body.messages.at(-1).content));
+    return {choices:[{finish_reason:'stop',message:{content:'继续冒险'}}],usage:{prompt_tokens:15000,completion_tokens:20}};
+  });
+  a.history=[];
+  await a.begin({maxRounds:1});
+  assert.equal(seen[0].includes('外部建议'),false);
+  r.store.status='running';r.store.startClock();
+  r.store.setAdvisor('先去Y=-58挖3颗钻石做钻石镐','控制台');
+  await a.begin({maxRounds:1});
+  assert.equal(seen[1].includes('外部建议（请优先参考，结合当前真实状态执行）：先去Y=-58挖3颗钻石做钻石镐'),true);
+  r.store.status='running';r.store.startClock();
+  r.store.setAdvisor('','控制台');
+  await a.begin({maxRounds:1});
+  assert.equal(seen[2].includes('外部建议'),false);
 });
 
 test('重开原子恢复自动摘要、手动笔记和完整历史，不再85KB直接裁剪',()=>{

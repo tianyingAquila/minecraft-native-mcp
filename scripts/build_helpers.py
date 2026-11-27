@@ -31,6 +31,7 @@ def sources(version):
             text=file.read_text(encoding='utf-8')
             # Explicit version branches stay in one shared source; no runtime reflection.
             if minor<2:
+                text=text.replace('net.minecraft.world.level.ServerExplosion','net.minecraft.world.level.Explosion').replace('ServerExplosion.getSeenPercent','Explosion.getSeenPercent')
                 text=text.replace('p.onGround(),p.horizontalCollision','p.onGround()')
                 text=text.replace('private static void fish$filter(ServerLevel level,Piglin','private static void fish$filter(Piglin').replace('private static void fish$invalid(ServerLevel level,Piglin','private static void fish$invalid(Piglin')
                 text=text.replace('level.getMinY()','level.getMinBuildHeight()').replace('level.getMaxY()','level.getMaxBuildHeight()')
@@ -60,17 +61,17 @@ def main():
         entry=next(x for x in MATRIX['versions'] if x['id']==version)
         deps=ROOT/'outputs/build-deps'/version
         print('BUILD',version,flush=True)
-        for key,name in [('mcp','mcpfabric.jar'),('baritone','baritone.jar'),('fabricApi','fabric-api.jar')]:artifact(entry[key],deps/name)
+        mcp_name='mcpfabric-upstream.jar' if version=='1.21' else 'mcpfabric.jar'
+        for key,name in [('mcp',mcp_name),('baritone','baritone.jar'),('fabricApi','fabric-api.jar')]:artifact(entry[key],deps/name)
         if version=='1.21':
             # Upstream 1.21.1 code is reused only after real 1.21 validation; retain every other entry.
-            original=deps/'mcpfabric.jar';patched=deps/'mcpfabric-compatible.jar'
+            original=deps/mcp_name;patched=deps/'mcpfabric.jar'
             with zipfile.ZipFile(original) as src,zipfile.ZipFile(patched,'w',zipfile.ZIP_DEFLATED) as out:
                 for info in src.infolist():
                     body=src.read(info.filename)
                     if info.filename=='fabric.mod.json':
                         mod=json.loads(body);mod['depends']['minecraft']='>=1.21 <1.21.2';body=json.dumps(mod).encode()
                     stamp=zipfile.ZipInfo(info.filename,date_time=(2026,1,1,0,0,0));stamp.compress_type=zipfile.ZIP_DEFLATED;out.writestr(stamp,body)
-            shutil.copy2(patched,original)
         sources(version)
         gradle=ROOT/'vendor/mcpfabric/gradlew.bat'
         command=[str(gradle),'-p',str(ROOT/'client-addon'),f'-PfishMinecraft={version}','build',':server-addon:build','--no-daemon','--console=plain']
@@ -96,8 +97,10 @@ def main():
             if 'data_minor' in pack:entry['dataPackVersion']['minor']=pack['data_minor']
         entry['validation']['compiled']=True
         row['dataPackVersion']=entry['dataPackVersion']
-        (ROOT/'versions.json').write_text(json.dumps(MATRIX,indent=2)+'\n',encoding='utf-8')
-        manifest_file.write_text(json.dumps(existing,indent=2)+'\n',encoding='utf-8')
+        for file, value in [(ROOT/'versions.json', MATRIX), (manifest_file, existing)]:
+            temporary=file.with_suffix('.json.tmp')
+            temporary.write_text(json.dumps(value,indent=2)+'\n',encoding='utf-8')
+            temporary.replace(file)
         print('COMPILED',version,flush=True)
 
 if __name__=='__main__':main()

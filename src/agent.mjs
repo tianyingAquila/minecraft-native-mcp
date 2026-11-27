@@ -9,6 +9,7 @@ import {
   reserveFor,
   chatCompletion,
   ServiceError,
+  bailianFallbackConfig,
 } from "./deepseek.mjs";
 import { unwrap } from "./mcp.mjs";
 import { VISION_TOOL } from "./vision.mjs";
@@ -66,6 +67,12 @@ export class Agent {
     return path.join(DATA, "agent-" + gameWorldName(this.store.settings) + ".json");
   }
   load() {
+    if (this.store.persist === false && !Object.getOwnPropertyDescriptor(this, "sessionFile")) {
+      this.history = [];
+      this.notes = "";
+      this.memory = ''; this.contextMeter = null;
+      return;
+    }
     try {
       const saved = JSON.parse(fs.readFileSync(this.sessionFile, "utf8"));
       this.history = Array.isArray(saved.history) ? saved.history : [];
@@ -79,6 +86,7 @@ export class Agent {
     }
   }
   save() {
+    if (this.store.persist === false && !Object.getOwnPropertyDescriptor(this, "sessionFile")) return;
     fs.mkdirSync(DATA, { recursive: true });
     try { fs.writeFileSync(
       this.sessionFile + '.tmp',
@@ -99,7 +107,10 @@ export class Agent {
     this.store.lastRequest = {...requestUsage(body,usage),kind};
     this.store.usage.prompt += usage.prompt_tokens || 0;
     this.store.usage.completion += usage.completion_tokens || 0;
-    this.store.usage.cached += usage.prompt_cache_hit_tokens || 0;
+    this.store.usage.cached +=
+      usage.prompt_cache_hit_tokens ||
+      usage.prompt_tokens_details?.cached_tokens ||
+      0;
     this.contextMeter = measureContext(body,usage);
   }
   async compactContext(body) {
@@ -107,14 +118,24 @@ export class Agent {
     if (!split.older.length) throw new Error('单轮记录或固定输入过大，无法安全整理；原记录保留。');
     await this.runtime.withFrozenGame(async () => {
       const request = summaryRequest(body);
-      const balance = await this.balanceFn();
-      this.store.balance = balance;
-      this.controller.signal.throwIfAborted();
-      if (this.store.status !== 'running') throw new DOMException('已暂停','AbortError');
-      if (!canSpend(balance,reserveFor(request))) throw new ServiceError('low_balance','余额不足以整理上下文，原记录保留，已暂停。');
+      const fallback = bailianFallbackConfig();
+      if (this.store.modelProvider !== "bailian") {
+        const balance = await this.balanceFn();
+        this.store.balance = balance;
+        this.controller.signal.throwIfAborted();
+        if (this.store.status !== 'running') throw new DOMException('已暂停','AbortError');
+        if (!canSpend(balance,reserveFor(request))) {
+          if (fallback) {
+            this.store.modelProvider = "bailian";
+            this.store.event("官方 DeepSeek 余额接近保护线，上下文整理已自动切换至百炼 " + fallback.model + "。");
+          } else {
+            throw new ServiceError('low_balance','余额不足以整理上下文，原记录保留，已暂停。');
+          }
+        }
+      }
       await this.mcp.assertReady?.();
       this.controller.signal.throwIfAborted();
-      const response = await this.chatFn(request,{signal:this.controller.signal});
+      const response = await this.chatFn(request,{signal:this.controller.signal,provider:this.store.modelProvider});
       this.recordUsage(request,response,'context_compaction');
       this.controller.signal.throwIfAborted();
       if (this.store.status !== 'running') throw new DOMException('已暂停','AbortError');
@@ -186,8 +207,11 @@ export class Agent {
         ...(this.runtime.vision && visionAvailable?.available!==false ? [VISION_TOOL] : []),
       ];
       if(requireAction){const active=tools.filter(t=>t.function.name==='inspect_game_screen'||!PASSIVE.has(t.function.name)&&!this.mcp.isReadOnly?.(t.function.name));if(active.length)tools=active;}
+      const advisorLine = this.store.advisor?.text
+        ? "\n外部建议（请优先参考，结合当前真实状态执行）：" + this.store.advisor.text
+        : "";
       const current =
-        "当前阶段目标（直播目标板持续显示，阶段未改变时不要重写）：" + this.store.goal + "\n当前真实游戏状态：\n" +
+        "当前阶段目标（直播目标板持续显示，阶段未改变时不要重写）：" + this.store.goal + advisorLine + "\n当前真实游戏状态：\n" +
         encodeObservation(snapshot) +
         '\n上一主要动作的真实反馈：'+JSON.stringify(this.feedback)+'\n当前是否适合轻量反应：'+reactionAllowed(this.feedback,snapshot)+
         "\n执行反馈（重复失败时必须先解决原因，不要重复开关同一容器）：" + JSON.stringify(this.progress.advice()) +
@@ -237,16 +261,38 @@ export class Agent {
         continue; // Refresh the real state after thawing; never act on the old snapshot.
       }
       phaseAt=Date.now();
-      const balance = await this.balanceFn();
-      this.store.performance.balanceMs=Date.now()-phaseAt;
-      this.store.balance = balance;
-      this.store.balanceError = "";
-      if (!canSpend(balance, reserveFor(body))) {
-        await this.runtime.pause(
-          "low_balance",
-          "账户余额接近 1 元保留线，已保存暂停。充值后可继续。",
-        );
-        return;
+      const fallback = bailianFallbackConfig();
+      if (this.store.modelProvider !== "bailian") {
+        let balance;
+        try {
+          balance = await this.balanceFn();
+        } catch (e) {
+          if (fallback) {
+            this.store.modelProvider = "bailian";
+            this.store.balanceError = e.message;
+            this.store.event("官方余额检查失败，已自动切换至阿里云百炼 " + fallback.model + "：" + e.message);
+            balance = null;
+          } else {
+            throw e;
+          }
+        }
+        this.store.performance.balanceMs=Date.now()-phaseAt;
+        if (balance) {
+          this.store.balance = balance;
+          this.store.balanceError = "";
+          if (!canSpend(balance, reserveFor(body))) {
+            if (fallback) {
+              this.store.modelProvider = "bailian";
+              this.store.event("官方 DeepSeek 余额接近 1 元保留线，已自动切换至阿里云百炼 " + fallback.model + " 继续冒险。");
+            } else {
+              await this.runtime.pause(
+                "low_balance",
+                "账户余额接近 1 元保留线，已保存暂停。充值后可继续。",
+              );
+              return;
+            }
+          }
+        }
       }
       if (this.controller.signal.aborted || this.store.status !== "running")
         return;
@@ -254,9 +300,28 @@ export class Agent {
       await this.mcp.assertReady?.();
       if (this.controller.signal.aborted || this.store.status !== "running") return;
       phaseAt=Date.now();
-      const response = await this.chatFn(body, {
-        signal: this.controller.signal,
-      });
+      let response;
+      try {
+        response = await this.chatFn(body, {
+          signal: this.controller.signal,
+          provider: this.store.modelProvider,
+        });
+      } catch (e) {
+        if (
+          this.store.modelProvider !== "bailian" &&
+          fallback &&
+          e?.code === "MODEL_HTTP_402"
+        ) {
+          this.store.modelProvider = "bailian";
+          this.store.event("官方 DeepSeek 返回 402 余额不足，已自动切换至阿里云百炼 " + fallback.model + " 重试。");
+          response = await this.chatFn(body, {
+            signal: this.controller.signal,
+            provider: "bailian",
+          });
+        } else {
+          throw e;
+        }
+      }
       this.store.performance.modelMs=Date.now()-phaseAt;
       if (image) this.runtime.vision.consumed(image.id);
       this.recordUsage(body,response);

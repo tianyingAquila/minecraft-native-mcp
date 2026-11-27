@@ -21,10 +21,17 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.AreaEffectCloud;
+import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
+import net.minecraft.world.entity.boss.enderdragon.phases.EnderDragonPhase;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.ServerExplosion;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.EndPortalFrameBlock;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -54,6 +61,36 @@ public final class FishLiveClient implements ClientModInitializer {
         FishHud.initialize();
         FishActionObservation.initialize();
         var router=McpFabric.router();
+        router.register("fish.mergeInventory", ctx -> ClientMc.call(() -> {
+            Gates.playerControl();
+            var player = ClientMc.player();
+            var menu = player.inventoryMenu;
+            if (player.containerMenu != menu || !menu.getCarried().isEmpty()) {
+                throw RpcException.badRequest("Close the external container and clear the cursor before merging stacks.");
+            }
+            var inventory = player.getInventory();
+            int merges = 0;
+            for (int source = 35; source >= 9; source--) {
+                for (int destination = 0; destination < source; destination++) {
+                    var from = inventory.getItem(source);
+                    var to = inventory.getItem(destination);
+                    if (from.isEmpty() || !ItemStack.isSameItemSameComponents(from, to)
+                            || to.getCount() >= to.getMaxStackSize()) continue;
+                    int targetSlot = destination < 9 ? destination + 36 : destination;
+                    var gameMode = ClientMc.gameMode();
+                    gameMode.handleInventoryMouseClick(menu.containerId, source, 0, ClickType.PICKUP, player);
+                    gameMode.handleInventoryMouseClick(menu.containerId, targetSlot, 0, ClickType.PICKUP, player);
+                    if (!menu.getCarried().isEmpty()) {
+                        gameMode.handleInventoryMouseClick(menu.containerId, source, 0, ClickType.PICKUP, player);
+                    }
+                    if (!menu.getCarried().isEmpty()) throw RpcException.badRequest("Inventory cursor did not clear after merging.");
+                    merges++;
+                }
+            }
+            var result = new JsonObject();
+            result.addProperty("merges", merges);
+            return result;
+        }));
         router.register("fish.assistInfo",ctx->ClientMc.call(()->{
             Gates.vision();JsonObject o=new JsonObject();String directory=System.getProperty("fish.assistDirectory");
             o.addProperty("available",directory!=null);if(directory!=null)o.addProperty("directory",directory);return o;
@@ -120,6 +157,57 @@ public final class FishLiveClient implements ClientModInitializer {
             equip(slot,0);ClientMc.mc().options.keyUse.setDown(true);ClientMc.gameMode().useItem(p,InteractionHand.MAIN_HAND);
             o.addProperty("started",true);return o;
         }));
+        router.register("fish.crystalExposure", ctx -> ClientMc.call(() -> {
+            Gates.playerControl();
+            var player = ClientMc.player();
+            UUID id = UUID.fromString(ctx.getString("uuid"));
+            var result = new JsonObject();
+            result.addProperty("found", false);
+            for (Entity entity : ClientMc.level().entitiesForRendering()) {
+                if (!(entity instanceof EndCrystal crystal) || !entity.getUUID().equals(id)) continue;
+                result.addProperty("found", true);
+                result.addProperty("x", crystal.getX());
+                result.addProperty("y", crystal.getY());
+                result.addProperty("z", crystal.getZ());
+                result.addProperty("distance", crystal.distanceTo(player));
+                result.addProperty("exposure", ServerExplosion.getSeenPercent(crystal.position(), player));
+                break;
+            }
+            return result;
+        }));
+        router.register("fish.dragonState", ctx -> ClientMc.call(() -> {
+            Gates.playerControl();
+            var result = new JsonObject();
+            var clouds = new JsonArray();
+            var player = ClientMc.player();
+            result.addProperty("found", false);
+            for (Entity entity : ClientMc.level().entitiesForRendering()) {
+                if (entity instanceof AreaEffectCloud cloud && cloud.distanceTo(player) < 24 && clouds.size() < 12) {
+                    var zone = new JsonObject();
+                    zone.addProperty("x",cloud.getX());
+                    zone.addProperty("y",cloud.getY());
+                    zone.addProperty("z",cloud.getZ());
+                    zone.addProperty("radius",cloud.getRadius());
+                    clouds.add(zone);
+                }
+                if (!(entity instanceof EnderDragon dragon) || result.get("found").getAsBoolean()) continue;
+                var head = dragon.head.getBoundingBox().getCenter();
+                var headPosition = new JsonObject();
+                headPosition.addProperty("x", head.x);
+                headPosition.addProperty("y", head.y);
+                headPosition.addProperty("z", head.z);
+                result.add("head", headPosition);
+                result.addProperty("found", true);
+                result.addProperty("uuid", dragon.getUUID().toString());
+                var phase = dragon.getPhaseManager().getCurrentPhase();
+                result.addProperty("sitting", phase.isSitting());
+                result.addProperty("landing", phase.getPhase() == EnderDragonPhase.LANDING);
+                result.addProperty("health", dragon.getHealth());
+                result.addProperty("dying", dragon.isDeadOrDying());
+            }
+            result.add("clouds",clouds);
+            return result;
+        }));
         router.register("fish.attack",ctx->ClientMc.call(()->{
             Gates.playerControl();var p=ClientMc.player();UUID uuid=UUID.fromString(ctx.getString("uuid"));
             Entity targetEntity=null;for(Entity e:ClientMc.level().entitiesForRendering())if(e.getUUID().equals(uuid)){targetEntity=e;break;}
@@ -129,19 +217,27 @@ public final class FishLiveClient implements ClientModInitializer {
             if(targetEntity instanceof net.minecraft.world.entity.LivingEntity living && living.isDeadOrDying()) {
                 o.addProperty("deathObserved",true); return o;
             }
-            if(!ClientMc.canReachEntity(p,targetEntity,0))throw RpcException.badRequest("Target is out of melee reach.");
-            Vec3 eye=p.getEyePosition(),aim=targetEntity.getBoundingBox().getCenter();
+            Entity hitTarget=targetEntity;
+            if(targetEntity instanceof EnderDragon dragon){
+                if(!dragon.getPhaseManager().getCurrentPhase().isSitting()){o.addProperty("waitingForPerch",true);return o;}
+                hitTarget=dragon.head;
+            }
+            if(!ClientMc.canReachEntity(p,hitTarget,0))throw RpcException.badRequest("Target is out of melee reach.");
+            Vec3 eye=p.getEyePosition(),aim=hitTarget.getBoundingBox().getCenter();
             lookAt(aim);
             var entityHit=ProjectileUtil.getEntityHitResult(p,eye,aim,p.getBoundingBox().expandTowards(aim.subtract(eye)).inflate(1),e->!e.isSpectator()&&e.isPickable(),p.entityInteractionRange()*p.entityInteractionRange());
             var blockHit=ClientMc.level().clip(new ClipContext(eye,aim,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,p));
-            if(entityHit==null||entityHit.getEntity()!=targetEntity||(blockHit.getType()==HitResult.Type.BLOCK&&eye.distanceToSqr(blockHit.getLocation())<eye.distanceToSqr(entityHit.getLocation())))throw RpcException.badRequest("Target is obstructed; move to a clear line of sight.");
+            if(entityHit==null||entityHit.getEntity()!=hitTarget||(blockHit.getType()==HitResult.Type.BLOCK&&eye.distanceToSqr(blockHit.getLocation())<eye.distanceToSqr(entityHit.getLocation())))throw RpcException.badRequest("Target is obstructed; move to a clear line of sight.");
             if(p.getAttackStrengthScale(0.5f)<0.9f){o.addProperty("cooldown",true);return o;}
-            ClientMc.gameMode().attack(p,targetEntity);p.swing(InteractionHand.MAIN_HAND);o.addProperty("attacked",true);return o;
+            ClientMc.gameMode().attack(p,hitTarget);p.swing(InteractionHand.MAIN_HAND);o.addProperty("attacked",true);return o;
         }));
         router.register("fish.useBlock",ctx->ClientMc.call(()->{
             Gates.playerControl();BlockPos pos=BlockPos.containing(ctx.getDouble("x"),ctx.getDouble("y"),ctx.getDouble("z"));
             var p=ClientMc.player();
-            var result=ClientMc.gameMode().useItemOn(p,InteractionHand.MAIN_HAND,visibleBlock(pos,null));
+            String faceName=ctx.optString("face","");
+            Direction face=faceName.isEmpty()?null:Direction.byName(faceName);
+            if(!faceName.isEmpty()&&face==null)throw RpcException.badRequest("Invalid block face.");
+            var result=ClientMc.gameMode().useItemOn(p,InteractionHand.MAIN_HAND,visibleBlock(pos,face));
             JsonObject o=new JsonObject();o.addProperty("result",result.toString());return o;
         }));
         router.register("fish.checkBlock",ctx->ClientMc.call(()->{
@@ -199,6 +295,10 @@ public final class FishLiveClient implements ClientModInitializer {
         o.addProperty("fullSupport",state.isFaceSturdy(level,pos,Direction.UP));
         o.addProperty("falling",state.getBlock() instanceof net.minecraft.world.level.block.FallingBlock);
         o.addProperty("blockEntity",state.hasBlockEntity());
+        if(state.getBlock() instanceof EndPortalFrameBlock){
+            o.addProperty("hasEye",state.getValue(EndPortalFrameBlock.HAS_EYE));
+            o.addProperty("facing",state.getValue(EndPortalFrameBlock.FACING).getName());
+        }
         o.addProperty("collision",!state.getCollisionShape(level,pos).isEmpty());o.addProperty("fluid",!state.getFluidState().isEmpty());return o;
     }
     private static JsonObject context() throws RpcException {

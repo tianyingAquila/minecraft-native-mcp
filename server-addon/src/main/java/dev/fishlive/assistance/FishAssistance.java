@@ -15,6 +15,10 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.piglin.Piglin;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.EndPortalFrameBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.level.material.Fluids;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,7 +28,8 @@ import java.util.Comparator;
 
 /** Bounded, per-world file requests. No extra socket, arbitrary commands or game edits. */
 public final class FishAssistance {
-    private static LavaSearch search;
+    private interface IncrementalSearch { boolean step() throws Exception; }
+    private static IncrementalSearch search;
     private static long nextPoll;
     private static long stabilityUntil;
     private static final ResourceLocation STABILITY=ResourceLocation.fromNamespaceAndPath("fish","trade_footing");
@@ -66,7 +71,14 @@ public final class FishAssistance {
                         if(target.equals("lava_lake")) {
                             search=new LavaSearch(root,id,result,level,player.blockPosition(),radius,deadline,out);return;
                         }
-                        if(target.equals("entities"))out=entities(level,player,radius);
+                        if(target.equals("end_portal")) {
+                            if(!dimension.equals("minecraft:overworld"))throw new IllegalStateException("End portal search is only available in the overworld");
+                            search=new EndPortalSearch(root,id,result,level,player.blockPosition(),radius,deadline,out);return;
+                        }
+                        if(target.equals("blaze_spawner")) {
+                            if(!dimension.equals("minecraft:the_nether"))throw new IllegalStateException("Blaze spawner search is only available in the nether");
+                            out=blazeSpawners(level,player.blockPosition(),radius);
+                        } else if(target.equals("entities"))out=entities(level,player,radius);
                         else {
                             String tag=switch(target){case "nether_fortress"->"fortress";case "village"->"village";case "ruined_portal"->"ruined_portal";case "stronghold"->"stronghold";default->throw new IllegalArgumentException("Unknown assistance target");};
                             boolean nether=dimension.equals("minecraft:the_nether");
@@ -84,7 +96,7 @@ public final class FishAssistance {
     }
     private static JsonObject entities(ServerLevel level,ServerPlayer player,int radius) {
         var list=new ArrayList<Entity>();
-        for(Entity entity:level.getAllEntities())if(entity!=player&&entity.distanceTo(player)<=radius&&(entity instanceof LivingEntity||entity instanceof ItemEntity))list.add(entity);
+        for(Entity entity:level.getAllEntities())if(entity!=player&&entity.distanceTo(player)<=radius&&(entity instanceof LivingEntity||entity instanceof ItemEntity||entity instanceof net.minecraft.world.entity.boss.enderdragon.EndCrystal))list.add(entity);
         list.sort(Comparator.comparingDouble(e->e.distanceTo(player)));
         JsonArray rows=new JsonArray();
         for(Entity entity:list.stream().limit(256).toList()) {
@@ -97,11 +109,43 @@ public final class FishAssistance {
         }
         JsonObject out=new JsonObject();out.addProperty("source","server_assistance_loaded_entities");out.addProperty("dimension",level.dimension().location().toString());out.addProperty("radius",radius);out.add("entities",rows);out.addProperty("omitted",Math.max(0,list.size()-256));return out;
     }
+    private static JsonObject blazeSpawners(ServerLevel level,BlockPos origin,int radius) {
+        int cx=origin.getX()>>4,cz=origin.getZ()>>4,r=(radius+15)/16;
+        double limit=(double)radius*radius;
+        var found=new ArrayList<BlockPos>();
+        for(int dx=-r;dx<=r;dx++)for(int dz=-r;dz<=r;dz++) {
+            var terrain=level.getChunkSource().getChunkNow(cx+dx,cz+dz);
+            if(terrain==null)continue;
+            for(BlockEntity be:terrain.getBlockEntities().values()) {
+                if(!(be instanceof SpawnerBlockEntity spawner))continue;
+                BlockPos pos=spawner.getBlockPos();
+                if(pos.distSqr(origin)>limit)continue;
+                String tag=spawner.getUpdateTag(level.registryAccess()).toString();
+                if(!tag.contains("minecraft:blaze")&&!tag.contains("\"blaze\""))continue;
+                found.add(pos);
+            }
+        }
+        found.sort(Comparator.comparingDouble(p->p.distSqr(origin)));
+        JsonArray list=new JsonArray();
+        for(BlockPos pos:found.stream().limit(4).toList()) {
+            JsonObject row=position(pos);
+            row.addProperty("distance",Math.sqrt(pos.distSqr(origin)));
+            list.add(row);
+        }
+        JsonObject out=new JsonObject();
+        out.addProperty("source","server_assistance");out.addProperty("dimension",level.dimension().location().toString());
+        out.addProperty("target","blaze_spawner");out.addProperty("radius",radius);
+        out.addProperty("found",!found.isEmpty());out.add("spawners",list);
+        if(!found.isEmpty()){BlockPos best=found.get(0);out.add("position",position(best));out.addProperty("distance",Math.sqrt(best.distSqr(origin)));}
+        out.addProperty("loadedTerrainOnly",true);
+        out.addProperty("note","Assisted search of loaded nether chunks for blaze spawners; does not generate chunks or guarantee a safe path.");
+        return out;
+    }
     private static JsonObject position(BlockPos p){JsonObject o=new JsonObject();o.addProperty("x",p.getX());o.addProperty("y",p.getY());o.addProperty("z",p.getZ());return o;}
     private static void write(Path file,JsonObject value)throws Exception {Path temp=file.resolveSibling(file.getFileName()+".tmp");Files.writeString(temp,value.toString());Files.move(temp,file,StandardCopyOption.REPLACE_EXISTING);}
 
     /** Scan chunk rings incrementally, with at most 2048 block probes per server tick. */
-    private static final class LavaSearch {
+    private static final class LavaSearch implements IncrementalSearch {
         final Path root,result;final String id;final ServerLevel level;final BlockPos origin;final long deadline;final JsonObject out;
         final ArrayList<int[]> chunks=new ArrayList<>();int chunk=0,cell=0;int probes=0;BlockPos best;double distance=Double.POSITIVE_INFINITY;
         LavaSearch(Path root,String id,Path result,ServerLevel level,BlockPos origin,int radius,long deadline,JsonObject out){
@@ -111,7 +155,7 @@ public final class FishAssistance {
             chunks.sort(Comparator.comparingDouble(this::lowerBound));
             out.addProperty("radius",radius);out.addProperty("target","lava_lake");
         }
-        boolean step()throws Exception {
+        public boolean step()throws Exception {
             if(Files.exists(root.resolve(id+".cancel"))){Files.deleteIfExists(root.resolve(id+".cancel"));return true;}
             boolean timedOut=System.currentTimeMillis()>deadline;
             if(!timedOut&&chunk<chunks.size()) {
@@ -143,6 +187,72 @@ public final class FishAssistance {
             out.addProperty("found",best!=null);out.addProperty("limited",limited||chunk<chunks.size());out.addProperty("blocksChecked",probes);
             if(best!=null){out.add("position",position(best));out.addProperty("distance",Math.sqrt(distance));}
             out.addProperty("loadedTerrainOnly",true);out.addProperty("note","Assisted search of loaded terrain for exposed clusters of at least five lava sources; does not generate chunks. A candidate, not proof of safe access, sufficient volume or the globally nearest lake.");
+            write(result,out);return true;
+        }
+    }
+
+    /** Scan loaded overworld chunks incrementally for end portal frames or an already lit end portal. */
+    private static final class EndPortalSearch implements IncrementalSearch {
+        final Path root,result;final String id;final ServerLevel level;final BlockPos origin;final long deadline;final JsonObject out;
+        final ArrayList<int[]> chunks=new ArrayList<>();int chunk=0,cell=0;int probes=0;BlockPos hit;double distance=Double.POSITIVE_INFINITY;
+        EndPortalSearch(Path root,String id,Path result,ServerLevel level,BlockPos origin,int radius,long deadline,JsonObject out){
+            this.root=root;this.id=id;this.result=result;this.level=level;this.origin=origin;this.deadline=deadline;this.out=out;
+            int cx=origin.getX()>>4,cz=origin.getZ()>>4,r=(radius+15)/16;
+            for(int dx=-r;dx<=r;dx++)for(int dz=-r;dz<=r;dz++)chunks.add(new int[]{cx+dx,cz+dz});
+            chunks.sort(Comparator.comparingDouble(this::lowerBound));
+            out.addProperty("radius",radius);out.addProperty("target","end_portal");
+        }
+        public boolean step()throws Exception {
+            if(Files.exists(root.resolve(id+".cancel"))){Files.deleteIfExists(root.resolve(id+".cancel"));return true;}
+            boolean timedOut=System.currentTimeMillis()>deadline;
+            if(!timedOut&&chunk<chunks.size()) {
+                int[] c=chunks.get(chunk);var terrain=level.getChunkSource().getChunkNow(c[0],c[1]);
+                if(terrain==null){chunk++;cell=0;return false;}
+                int top=Math.min(level.getMaxY()-1,64);
+                int low=Math.max(level.getMinY()+4,-56);
+                int height=top-low+1;
+                for(int n=0;n<2048&&cell<256*height;n++,cell++) {
+                    int column=cell/height,y=low+cell%height,x=c[0]*16+column%16,z=c[1]*16+column/16;
+                    var p=new BlockPos(x,y,z);probes++;
+                    var state=terrain.getBlockState(p);
+                    if(!state.is(Blocks.END_PORTAL_FRAME)&&!state.is(Blocks.END_PORTAL))continue;
+                    hit=p;distance=p.distSqr(origin);
+                    return finish(false);
+                }
+                if(cell>=256*height){chunk++;cell=0;}
+                return false;
+            }
+            return finish(timedOut);
+        }
+        double lowerBound(int[] c){
+            double x=Math.max(c[0]*16,Math.min(origin.getX(),c[0]*16+15)),z=Math.max(c[1]*16,Math.min(origin.getZ(),c[1]*16+15));
+            return Math.pow(x-origin.getX(),2)+Math.pow(z-origin.getZ(),2);
+        }
+        boolean finish(boolean limited)throws Exception {
+            out.addProperty("found",hit!=null);out.addProperty("limited",limited||chunk<chunks.size());out.addProperty("blocksChecked",probes);
+            if(hit!=null){
+                int sumX=0,sumZ=0,frames=0,eyes=0;boolean lit=false;BlockPos frameSample=hit;
+                for(int dx=-4;dx<=4;dx++)for(int dz=-4;dz<=4;dz++){
+                    BlockPos p=hit.offset(dx,0,dz);
+                    if(!level.hasChunkAt(p))continue;
+                    var s=level.getBlockState(p);
+                    if(s.is(Blocks.END_PORTAL))lit=true;
+                    if(s.is(Blocks.END_PORTAL_FRAME)){
+                        sumX+=p.getX();sumZ+=p.getZ();frames++;frameSample=p;
+                        if(s.getValue(EndPortalFrameBlock.HAS_EYE))eyes++;
+                    }
+                }
+                BlockPos center=frames>0?new BlockPos((int)Math.round((double)sumX/frames),hit.getY(),(int)Math.round((double)sumZ/frames)):hit;
+                out.add("position",position(center));
+                out.add("framePosition",position(frameSample));
+                out.addProperty("framesFound",frames);
+                out.addProperty("eyesPresent",eyes);
+                out.addProperty("eyesMissing",Math.max(0,12-eyes));
+                out.addProperty("lit",lit);
+                out.addProperty("distance",Math.sqrt(center.distSqr(origin)));
+            }
+            out.addProperty("loadedTerrainOnly",true);
+            out.addProperty("note","Assisted search of loaded overworld chunks for end portal frames; approach stronghold first if not loaded yet.");
             write(result,out);return true;
         }
     }

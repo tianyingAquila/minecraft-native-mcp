@@ -26,7 +26,7 @@ export async function barterPiglins(args,{call,signal,now=Date.now,sleep=ms=>del
  if(!block)throw Error('搭交易高台需要同一格至少两个普通建筑方块。');
  const before=count(inventory,id),observed=new Map(),baseline=new Set(scene.entities.map(e=>e.uuid));
  const receipt={status:'interrupted',item:id,requested:wanted,inventoryBefore:before,inventoryAfter:before,gained:0,goldBudget,goldOffers:0,goldSpent:0,piglin:piglin.uuid,towerBlocks:0,observedDrops:[],elapsedMs:0};
- let floor=initial,platform=null;
+ let floor=initial,platform=null,stoppedReason;
  const finish=async reason=>{
   const after=await call('player.getInventory');receipt.inventoryAfter=count(after,id);receipt.gained=Math.max(0,receipt.inventoryAfter-before);
   const netGold=Math.max(0,count(inventory,'minecraft:gold_ingot')-count(after,'minecraft:gold_ingot'));receipt.goldRecovered=Math.max(0,receipt.goldSpent-netGold);receipt.goldSpent=netGold;
@@ -43,26 +43,34 @@ export async function barterPiglins(args,{call,signal,now=Date.now,sleep=ms=>del
  };
  try {
   await call('fish.cancel');await call('screen.close');
-  if(piglin.distance>8){
+  if(piglin.distance>5.5){
    const progress={};
-   await call('fish.navigate',{x:piglin.x,y:piglin.y,z:piglin.z,reach:6});
+   await call('fish.navigate',{x:piglin.x,y:piglin.y,z:piglin.z,reach:4.5});
    const until=Math.min(deadline,now()+12000);
-   while(now()<until){const self=await ensure(),remaining=distance(self,piglin);advance(progress,remaining,{now:now()});if(remaining<=7||now()-progress.bestAt>6000)break;await sleep(200);}
+   while(now()<until){const self=await ensure(),remaining=distance(self,piglin);advance(progress,remaining,{now:now()});if(remaining<=5||now()-progress.bestAt>6000)break;await sleep(200);}
    await call('fish.cancel');
   }
+  await stabilize();
+  await sleep(120);
   floor=await ensure();if(distance(floor,piglin)>10)return finish('piglin_unreachable');
   // Two ordinary jump-and-place actions. Never synthesize blocks or teleport.
   const x=Math.floor(floor.x),y=Math.floor(floor.y),z=Math.floor(floor.z);
   const space=(await call('fish.probeBlocks',{positions:[{x,y:y-1,z},...Array.from({length:4},(_,i)=>({x,y:y+i,z}))]})).blocks;
   if(!floor.onGround||!space[0]?.fullSupport||space.slice(1).some(b=>!b.loaded||b.collision||b.fluid))return finish('tower_space_blocked');
-  await stabilize();
   await call('fish.equip',{slot:block.slot,hotbarSlot:7});
   for(let step=0;step<2;step++){
    await call('control.setInput',{jump:true});let placed=false;const until=Math.min(deadline,now()+2500);
    while(now()<until){
     const self=await ensure();
+    if(Math.floor(self.x)!==x||Math.floor(self.z)!==z){receipt.lastProblem='角色已偏离搭台格';break;}
     if(self.y>=y+step+1.02){
-     try{await call('fish.placeBlock',{x,y:y+step-1,z,face:'up'});placed=true;break;}catch(error){signal?.throwIfAborted();receipt.lastProblem=error.message;}
+     try{
+      await call('fish.placeBlock',{x,y:y+step-1,z,face:'up'});
+      await sleep(90);
+      const proof=(await call('fish.probeBlocks',{positions:[{x,y:y+step,z}]})).blocks[0];
+      if(proof?.fullSupport){placed=true;break;}
+      receipt.lastProblem='跳放后未见实际支撑方块';
+     }catch(error){signal?.throwIfAborted();receipt.lastProblem=error.message;}
     }
     await sleep(40);
    }
@@ -77,7 +85,12 @@ export async function barterPiglins(args,{call,signal,now=Date.now,sleep=ms=>del
   if(platform.y<y+1.8)return finish('tower_height_not_confirmed');
   for(let offer=0;offer<goldBudget&&now()<deadline-5000;offer++){
    await ensure();scene=await query();observe(scene.entities);
-   const target=scene.entities.find(e=>e.uuid===piglin.uuid&&!e.baby);
+   let target=scene.entities.find(e=>e.uuid===piglin.uuid&&!e.baby);
+   const approachUntil=Math.min(deadline-5000,now()+4500);
+   while(target&&target.health!==0&&distance(target,platform)>6&&now()<approachUntil){
+    await sleep(250);await ensure();scene=await query();observe(scene.entities);
+    target=scene.entities.find(e=>e.uuid===piglin.uuid&&!e.baby);
+   }
    if(target?.health===0)return finish('piglin_died');
    if(!target||distance(target,platform)>6)return {...await finish(target?'piglin_moved_out_of_range':'piglin_no_longer_loaded'),lastTarget:target||null,platform};
    if(target.mainhand==='minecraft:crossbow')return finish('piglin_switched_to_crossbow');
@@ -92,19 +105,24 @@ export async function barterPiglins(args,{call,signal,now=Date.now,sleep=ms=>del
    const spent=goldBefore-count(await call('player.getInventory'),'minecraft:gold_ingot');
    if(spent!==1)return finish('gold_offer_not_confirmed');
    receipt.goldSpent++;
-   const prior=new Set(observed.keys()),waitUntil=Math.min(deadline-4000,now()+14000);let accepted=false,produced=false;
+   const prior=new Map([...observed].map(([uuid,drop])=>[uuid,drop.count])),waitUntil=Math.min(deadline-4000,now()+14000);let accepted=false,produced=false;
    while(now()<waitUntil){
     await ensure();scene=await query();observe(scene.entities);
     const recipient=scene.entities.find(e=>e.uuid===piglin.uuid);
     accepted ||= recipient?.offhand==='minecraft:gold_ingot';
     const carried=await call('player.getInventory');
-    produced=[...observed.keys()].some(uuid=>!prior.has(uuid))||stacks(carried).some(i=>i.id!=='minecraft:gold_ingot'&&count(carried,i.id)>count(inv,i.id));
+    produced ||= scene.entities.some(drop=>observed.has(drop.uuid)&&drop.count>(prior.get(drop.uuid)??0))||stacks(carried).some(i=>i.id!=='minecraft:gold_ingot'&&count(carried,i.id)>count(inv,i.id));
     if(accepted&&recipient&&recipient.offhand!=='minecraft:gold_ingot'&&produced)break;
     await sleep(300);
    }
-   if(!accepted||!produced)return {...await finish(accepted?'exchange_output_not_observed':'gold_recipient_not_confirmed'),lastTarget:scene.entities.find(e=>e.uuid===piglin.uuid)||null,unclaimedGold:scene.entities.filter(e=>e.item==='minecraft:gold_ingot').slice(0,3),platform};
+   if(!accepted||!produced){
+    stoppedReason=accepted?'exchange_output_not_observed':'gold_recipient_not_confirmed';
+    receipt.lastTarget=scene.entities.find(e=>e.uuid===piglin.uuid)||null;
+    receipt.unclaimedGold=scene.entities.filter(e=>e.item==='minecraft:gold_ingot').slice(0,3);
+    break;
+   }
    if(count(await call('player.getInventory'),id)-before>=wanted)return finish('requested_items_collected');
-   if([...observed.values()].filter(e=>e.item===id).reduce((n,e)=>n+e.count,0)>=wanted)break;
+   if(scene.entities.filter(e=>e.item===id&&observed.has(e.uuid)).reduce((n,e)=>n+e.count,0)>=wanted)break;
   }
   // Leave the pillar on a checked, solid adjacent floor; collect by normal walking.
   const adjacent=[{x:x+1,z},{x:x-1,z},{x,z:z+1},{x,z:z-1}];
@@ -137,7 +155,7 @@ export async function barterPiglins(args,{call,signal,now=Date.now,sleep=ms=>del
    while(now()<until){const self=await ensure();if(distance(self,drop)<1.2)break;await sleep(150);}
    await call('fish.cancel');await sleep(200);
   }
-  return finish(receipt.goldSpent>=goldBudget?'gold_budget_exhausted':'time_or_available_gold_exhausted');
+  return finish(stoppedReason??(receipt.goldSpent>=goldBudget?'gold_budget_exhausted':'time_or_available_gold_exhausted'));
  }catch(error){signal?.throwIfAborted();if(error.code==='BARTER_DANGER')return {...await finish('player_danger'),message:error.message,playerState:error.playerState,platformPosition:platform?{x:platform.x,y:platform.y,z:platform.z}:null};throw error;}
  finally{await call('fish.cancel').catch(()=>{});}
 }

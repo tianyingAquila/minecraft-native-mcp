@@ -12,6 +12,8 @@ export class Store {
     this.reason = "";
     this.balance = null;
     this.balanceError = "";
+    this.modelProvider = "official";
+    this.advisor = null;
     this.goal = "准备踏上击杀末影龙的旅程";
     this.health = null;
     this.hunger = null;
@@ -39,6 +41,7 @@ export class Store {
         );
         if (saved.settings?.world === this.settings.world && (saved.settings?.resolvedVersion||'1.21.4')===(this.settings.resolvedVersion||'1.21.4')) {
           this.goal = saved.goal || this.goal;
+          this.advisor = saved.advisor?.text ? saved.advisor : null;
           if (saved.status !== "stopped")
             this.runningMs = Number(saved.runningMs) || 0;
           this.usage = saved.usage || this.usage;
@@ -76,6 +79,27 @@ export class Store {
   sayReaction(text,eventId){
     if(text)this.reaction={seq:++this.reactionSeq,text,eventId,at:Date.now()};
   }
+  setAdvisor(text, source = "console") {
+    const clean = String(text ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
+    if (!clean) {
+      if (this.advisor) {
+        this.advisor = null;
+        this.event("已清空外部建议，AI 恢复自主决策。");
+      } else {
+        this.save();
+      }
+      return this.advisor;
+    }
+    const label = String(source || "console").replace(/\s+/g, " ").trim().slice(0, 40) || "console";
+    this.advisor = {
+      text: clean,
+      source: label,
+      updatedAt: Date.now(),
+      seq: (this.advisor?.seq || 0) + 1,
+    };
+    this.event("更新外部建议（" + label + "）：" + clean);
+    return this.advisor;
+  }
   save() {
     if (!this.persist) return;
     fs.mkdirSync(DATA, { recursive: true });
@@ -87,6 +111,7 @@ export class Store {
           runningMs: this.elapsed(),
           settings: this.settings,
           goal: this.goal,
+          advisor: this.advisor,
           usage: this.usage,
           updatedAt: Date.now(),
         },
@@ -129,6 +154,8 @@ export class Store {
           }
         : null,
       balanceError: this.balanceError,
+      modelProvider: this.modelProvider,
+      advisor: this.advisor,
       goal: this.goal,
       health: this.health,
       hunger: this.hunger,

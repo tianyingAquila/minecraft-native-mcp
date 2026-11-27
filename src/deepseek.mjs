@@ -23,6 +23,31 @@ export function readDeepSeekKey() {
     "没有读到 DSH 的 DeepSeek 凭据，请在 DSH 设置中检查 API key。",
   );
 }
+export function readBailianKey() {
+  if (process.env.ALIYUN_BAILIAN_API_KEY?.trim())
+    return process.env.ALIYUN_BAILIAN_API_KEY.trim();
+  try {
+    const doc = YAML.parse(
+      fs.readFileSync(path.join(DSH_HOME, ".credentials.yaml"), "utf8"),
+    );
+    const key = doc?.refs?.ALIYUN_BAILIAN_API_KEY;
+    if (typeof key === "string" && key.trim()) return key.trim();
+  } catch {}
+  return "";
+}
+export function bailianFallbackConfig() {
+  if (process.env.FISH_BAILIAN_FALLBACK !== "1") return null;
+  const key = readBailianKey();
+  if (!key) return null;
+  return {
+    provider: "bailian",
+    baseUrl: (
+      process.env.FISH_BAILIAN_BASE_URL ||
+      "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    ).replace(/\/+$/, ""),
+    model: process.env.FISH_BAILIAN_MODEL || "deepseek-v4.1-flash-1017",
+  };
+}
 export function amountMicros(value) {
   const text = String(value);
   if (!/^\d+(\.\d+)?$/.test(text))
@@ -126,17 +151,36 @@ export async function chatCompletion(
     fetchImpl = fetch,
     keyReader = readDeepSeekKey,
     timeoutMs = 120000,
+    provider = "official",
   } = {},
 ) {
+  const useBailian = provider === "bailian";
+  const cfg = useBailian ? bailianFallbackConfig() : null;
+  const endpoint = useBailian
+    ? (cfg?.baseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1") +
+      "/chat/completions"
+    : "https://api.deepseek.com/chat/completions";
+  const requestBody = useBailian
+    ? { ...body, model: cfg?.model || "deepseek-v4.1-flash-1017" }
+    : body;
+  const token = useBailian ? readBailianKey() : keyReader();
+  if (!token)
+    throw new ServiceError(
+      "NO_CREDENTIAL",
+      useBailian
+        ? "没有读到百炼 API Key。"
+        : "没有读到 DSH 的 DeepSeek 凭据，请在 DSH 设置中检查 API key。",
+    );
+  const label = useBailian ? "百炼 DeepSeek" : "DeepSeek";
   let response;
   try {
-    response = await fetchImpl("https://api.deepseek.com/chat/completions", {
+    response = await fetchImpl(endpoint, {
       method: "POST",
       headers: {
-        Authorization: "Bearer " + keyReader(),
+        Authorization: "Bearer " + token,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(requestBody),
       redirect: "error",
       signal: signal
         ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
@@ -147,21 +191,21 @@ export async function chatCompletion(
     if (e.name === "TimeoutError")
       throw new ServiceError(
         "MODEL_TIMEOUT",
-        "DeepSeek 响应超时，已停止本轮并暂停。",
+        label + " 响应超时，已停止本轮并暂停。",
       );
     if (e.name === "AbortError") throw e;
     throw new ServiceError(
       "MODEL_NETWORK",
-      "DeepSeek 请求中断；已暂停，请检查网络后继续。",
+      label + " 请求中断；已暂停，请检查网络后继续。",
     );
   }
   if (!response.ok)
     throw new ServiceError(
       "MODEL_HTTP_" + response.status,
-      "DeepSeek 返回 HTTP " + response.status + "，已暂停。",
+      label + " 返回 HTTP " + response.status + "，已暂停。",
     );
   const data = await response.json();
   if (!data.choices?.[0]?.message)
-    throw new ServiceError("MODEL_SHAPE", "DeepSeek 没有返回有效回复。");
+    throw new ServiceError("MODEL_SHAPE", label + " 没有返回有效回复。");
   return data;
 }

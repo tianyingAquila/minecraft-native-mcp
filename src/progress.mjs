@@ -30,9 +30,18 @@ export class ProgressGuard {
   record(name, args, result) {
     if(result?.state==='cancelled')return;
     if (name==='inspect_game_screen'||['REPLAN_REQUIRED','OBSERVATION_REQUIRED'].includes(result?.error)) return;
-    if (result?.state !== 'failed' && !result?.error) return;
+    const body = result?.result;
+    const zeroProgressInterrupt =
+      result?.state === 'interrupted' &&
+      body &&
+      typeof body === 'object' &&
+      body.reason !== 'new_environment' &&
+      (body.completedSteps === 0 || body.advanced === 0) &&
+      (body.brokenBlocks ?? 0) === 0;
+    if (result?.state !== 'failed' && !result?.error && !zeroProgressInterrupt) return;
     const key = this.actionKey(name,args), previous = this.failures.get(key);
-    this.failures.set(key,{count:(previous?.count || 0)+1, action:name, message:String(result.message || result.result || result.error).slice(0,1500)});
+    const detail = result.message || (typeof body === 'string' ? body : body?.message || body?.reason) || result.error;
+    this.failures.set(key,{count:(previous?.count || 0)+1, action:name, message:String(detail).slice(0,1500)});
   }
   advice(now = Date.now()) {
     return {recentFailures: [...this.failures.values()].slice(-3), stalled: this.rounds >= 8 && now-this.changedAt >= 45000};

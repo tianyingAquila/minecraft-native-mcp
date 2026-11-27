@@ -30,19 +30,20 @@ export async function assistanceQuery(call,target,{radius=96,structureChunks=32,
 
 export async function locateResource(args,{call,signal}={}) {
  const target=args.target;
- if(!['lava_lake','nether_fortress','village','ruined_portal','stronghold','piglin','blaze','enderman'].includes(target))throw Error('请选择岩浆湖、地狱堡垒、村庄、废弃传送门、末地要塞或猪灵/烈焰人/末影人。');
+ if(!['lava_lake','nether_fortress','village','ruined_portal','stronghold','blaze_spawner','end_portal','piglin','blaze','enderman'].includes(target))throw Error('请选择岩浆湖、地狱堡垒、烈焰人刷怪笼、村庄、废弃传送门、末地要塞、末地传送门或猪灵/烈焰人/末影人。');
  const radius=args.radius??96,structureChunks=args.structureChunks??32;
- if(!Number.isInteger(radius)||radius<16||radius>256||!Number.isInteger(structureChunks)||structureChunks<1||structureChunks>64)throw Error('生物/岩浆搜索16–256格，结构搜索1–64个区块。');
+ if(!Number.isInteger(radius)||radius<16||radius>256||!Number.isInteger(structureChunks)||structureChunks<1||structureChunks>64)throw Error('生物/岩浆/刷怪笼/末地门搜索16–256格，结构搜索1–64个区块。');
  if(['piglin','blaze','enderman'].includes(target)) {
   const result=await assistanceQuery(call,'entities',{radius,signal});
   const entities=result.entities.filter(e=>e.type==='minecraft:'+target&&(e.health??1)>0&&!(target==='piglin'&&e.baby)).slice(0,5);
   return {source:result.source,dimension:result.dimension,target,found:entities.length>0,radius,entities,note:'只查询当前已加载的生物；未找到不代表更远处没有。坐标不是安全路线。'};
  }
  const result=await assistanceQuery(call,target,{radius,structureChunks,signal});
- if(target!=='lava_lake'&&result.position){
+ if(!['lava_lake','blaze_spawner','end_portal'].includes(target)&&result.position){
   // Vanilla structure locators often return Y=0, which is not an entrance.
   const {x,z}=result.position;result.position={x,z};result.heightKnown=false;delete result.distance;
-  result.note='服务端提供结构的水平坐标，高度和入口未知。不要朝Y=0挖掘；选择可通行高度接近，再观察实际建筑。';
+  const extra=target==='stronghold'?'抵达附近后可用locate_resource(target="end_portal")直接获取末地传送门精确三维坐标。':target==='nether_fortress'?'抵达附近后可用locate_resource(target="blaze_spawner")直接查找周围烈焰人刷怪笼精确坐标。':'';
+  result.note='服务端提供结构的水平坐标，高度和入口未知。不要朝Y=0挖掘；选择可通行高度接近，再观察实际建筑。'+extra;
  }
  return result;
 }

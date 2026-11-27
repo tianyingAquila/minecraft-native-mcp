@@ -56,7 +56,17 @@ function render(s) {
   for(const el of document.querySelectorAll('.stream-only'))el.hidden=!streaming;
   const frame=$('stream-preview');if(streaming&&!frame.hasAttribute('src'))frame.src=frame.dataset.src;if(!streaming&&frame.hasAttribute('src'))frame.removeAttribute('src');
   $('display-mode').textContent=streaming?'直播扩展已启用':'普通游玩模式';
-  $('action-plan').textContent=s.actionPlan?'当前打算：'+s.actionPlan:'';
+  $("action-plan").textContent=s.actionPlan?'当前打算：'+s.actionPlan:'';
+  const adv=s.advisor;
+  if(adv?.text){
+    const when=adv.updatedAt?new Date(adv.updatedAt).toLocaleTimeString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'}):'';
+    $('advisor-active').textContent=`生效中（${adv.source||'外部'} ${when}）：${adv.text}`;
+    $('advisor-active').classList.add('advisor-live');
+  }else{
+    $('advisor-active').textContent='当前无外部建议，AI 自主决策中。';
+    $('advisor-active').classList.remove('advisor-live');
+  }
+  $('advisor-clear').disabled=!adv?.text;
   $("status").textContent = names[s.status] || s.status;
   $("status").className = "status " + s.status;
   $("goal").textContent = s.goal;
@@ -144,6 +154,16 @@ $("settings").addEventListener("submit", (e) => {
   });
 });
 $('disable-streaming').onclick=()=>command('settings',{settings:{streamingEnabled:false,nativeHudEnabled:false}});
+$('advisor-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const text=$('advisor-input').value.trim();
+  await command(text?'set_advisor':'clear_advisor',{text,source:'控制台'});
+  if(text)$('advisor-input').value='';
+});
+$('advisor-clear').onclick=async()=>{
+  $('advisor-input').value='';
+  await command('clear_advisor');
+};
 $("overlay-url").textContent = location.origin + "/overlay?key=green";
 await refresh();
 await refreshWorlds();

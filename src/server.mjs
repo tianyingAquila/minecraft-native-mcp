@@ -53,6 +53,16 @@ const server = http.createServer(async (req, res) => {
       });
     if (url.pathname === "/api/state")
       return json(res, 200, runtime.store.publicState());
+    if (url.pathname === "/api/advisor" && req.method === "GET")
+      return json(res, 200, { advisor: runtime.store.advisor });
+    if (url.pathname === "/api/advisor" && req.method === "POST") {
+      const value = await body(req);
+      const advisor = runtime.store.setAdvisor(
+        value.clear ? "" : value.text,
+        value.source || "external",
+      );
+      return json(res, 200, { ok: true, advisor, state: runtime.store.publicState() });
+    }
     if (url.pathname === '/api/environment')return json(res,200,await runtime.checkEnvironment());
     if (url.pathname === '/api/worlds')return json(res,200,runtime.worldList());
     if (url.pathname === "/api/overlay") {
@@ -112,6 +122,12 @@ const server = http.createServer(async (req, res) => {
         case "show_commentary":
           runtime.store.say("气泡测试：接下来去收集木头。", "preview");
           break;
+        case "set_advisor":
+          runtime.store.setAdvisor(value.text, value.source || "console");
+          break;
+        case "clear_advisor":
+          runtime.store.setAdvisor("", "console");
+          break;
         case "observer":
           if (runtime.minecraft.child?.exitCode !== null)
             throw new Error("请先准备游戏。");
@@ -164,14 +180,15 @@ server.listen(PORT, "127.0.0.1", () => {
   void runtime.refreshBalance().catch(() => {});
 });
 const balanceTimer = setInterval(() => {
+  if (runtime.store.modelProvider === "bailian") return;
   void runtime
     .refreshBalance()
     .then((balance) => {
-      if (runtime.store.status === "running" && balance.micros < 1e6)
+      if (runtime.store.status === "running" && runtime.store.modelProvider !== "bailian" && balance.micros < 1e6)
         void runtime.pause("low_balance", "账户余额低于 1 元，已保存暂停。");
     })
     .catch(() => {
-      if (runtime.store.status === "running")
+      if (runtime.store.status === "running" && runtime.store.modelProvider !== "bailian")
         void runtime.pause("balance_error", "余额查询失败，已保存暂停。");
     });
 }, 60000);

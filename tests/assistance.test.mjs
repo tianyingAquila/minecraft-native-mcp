@@ -46,7 +46,7 @@ function barterFixture({pickup=false,confirmGold=true,abortAtOffer=false,receipt
  };
  const query=async()=>{
   if(offers&&++queriesAfterOffer>1)offhand='minecraft:air';
-  return {entities:[{...piglin,offhand},...(offers&&queriesAfterOffer>1&&!receiptToPlatform?[{uuid:'new-drop',item:'minecraft:ender_pearl',count:2,x:1,y:64,z:0}]:[])]};
+  return {entities:[{...piglin,offhand},...(offers&&queriesAfterOffer>1&&!receiptToPlatform?[{uuid:'new-drop',item:'minecraft:ender_pearl',count:2*offers,x:1,y:64,z:0}]:[])]};
  };
  return {call,query,stabilize:async()=>({activeMs:5000,damageProtection:false}),signal:controller.signal,now:()=>clock,sleep:async ms=>{clock+=ms;},offers:()=>offers};
 }
@@ -57,6 +57,11 @@ test('交易有金锭预算；看到珍珠不等于拿到，既有七颗也不�
  const success=await barterPiglins({item:'ender_pearl',count:2,goldBudget:1,seconds:30},barterFixture({pickup:true}));assert.equal(success.gained,2);assert.equal(success.status,'succeeded');
 });
 
+test('后一笔交易掉落并入同一物品堆时，数量增加仍是产出证据',async()=>{
+ const result=await barterPiglins({item:'ender_pearl',count:4,goldBudget:2,seconds:45},barterFixture());
+ assert.equal(result.reason,'gold_budget_exhausted');assert.equal(result.goldSpent,2);assert.equal(result.observedDrops[0].count,4);assert.equal(result.gained,0);
+});
+
 test('投金回执未确认不能重投；取消后没有下一枚',async()=>{
  const f=barterFixture({confirmGold:false});const result=await barterPiglins({item:'ender_pearl',count:2,goldBudget:3,seconds:30},f);assert.equal(result.reason,'gold_offer_not_confirmed');assert.equal(f.offers(),1);
  const cancelled=barterFixture({abortAtOffer:true});await assert.rejects(barterPiglins({item:'ender_pearl',count:2,goldBudget:3,seconds:30},cancelled));assert.equal(cancelled.offers(),1);
@@ -64,4 +69,39 @@ test('投金回执未确认不能重投；取消后没有下一枚',async()=>{
 
 test('猪灵把产物直接抛进高台玩家背包时，以新增量确认，不强行下来',async()=>{
  const result=await barterPiglins({item:'minecraft:ender_pearl',count:2,goldBudget:1,seconds:30},barterFixture({receiptToPlatform:true}));assert.equal(result.status,'succeeded');assert.equal(result.gained,2);assert.deepEqual(result.observedDrops,[]);
+});
+
+test('locateResource支持烈焰人刷怪笼与末地传送门精确三维坐标，结构查询保留二次提示',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'fish-locate-'));
+ let pending;
+ try{
+  const respond=(payload)=>{
+   clearInterval(pending);
+   pending=setInterval(async()=>{
+    for(const name of await fs.readdir(root)){
+     if(!name.endsWith('.request.json'))continue;
+     clearInterval(pending);
+     await fs.rm(path.join(root,name));
+     const output=path.join(root,name.replace('.request.','.result.'));
+     await fs.writeFile(output+'.tmp',JSON.stringify(payload));
+     await fs.rename(output+'.tmp',output);
+    }
+   },10);
+  };
+  const callFor=dim=>async method=>method==='fish.assistInfo'?{available:true,directory:root}:{dimension:dim};
+  respond({source:'server_assistance',dimension:'minecraft:the_nether',target:'blaze_spawner',found:true,position:{x:120,y:62,z:-44},distance:18});
+  const spawner=await locateResource({target:'blaze_spawner',radius:64},{call:callFor('minecraft:the_nether')});
+  assert.deepEqual(spawner.position,{x:120,y:62,z:-44});
+
+  respond({source:'server_assistance',dimension:'minecraft:overworld',target:'end_portal',found:true,position:{x:-300,y:28,z:912},framesFound:12,eyesPresent:2,eyesMissing:10,lit:false});
+  const portal=await locateResource({target:'end_portal',radius:96},{call:callFor('minecraft:overworld')});
+  assert.deepEqual(portal.position,{x:-300,y:28,z:912});
+  assert.equal(portal.eyesMissing,10);
+
+  respond({source:'server_assistance',dimension:'minecraft:overworld',target:'stronghold',found:true,position:{x:-288,y:0,z:900}});
+  const sh=await locateResource({target:'stronghold'},{call:callFor('minecraft:overworld')});
+  assert.deepEqual(sh.position,{x:-288,z:900});
+  assert.equal(sh.heightKnown,false);
+  assert.ok(sh.note.includes('end_portal'));
+ }finally{clearInterval(pending);await fs.rm(root,{recursive:true,force:true});}
 });

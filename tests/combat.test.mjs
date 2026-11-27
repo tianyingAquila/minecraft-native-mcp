@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fightEntity,chooseMeleeWeapon} from '../src/combat.mjs';
 const uuid='11111111-1111-4111-8111-111111111111';
-function fixture({missing=false,blocked=false,stationary=false,health=20,kind='minecraft:cow',signal}={}){
+function fixture({missing=false,movedOutOfReach=false,loot=false,blocked=false,stationary=false,health=20,kind='minecraft:cow',signal}={}){
  let time=0,hp=10,nav=null,attacks=0,moves=0,cancels=0;const self={x:0,y:64,z:0,health,gameMode:'survival',dimension:'minecraft:overworld'},target={uuid,type:kind,x:8,y:64,z:0,distance:8},inventory={selectedSlot:0,hotbar:[{slot:1,id:'minecraft:stone_sword',count:1}],main:[]};
  const call=async(method,args={})=>{
   if(method==='fish.cancel'){nav=null;cancels++;return {};}
@@ -10,10 +10,14 @@ function fixture({missing=false,blocked=false,stationary=false,health=20,kind='m
   if(method==='player.getState')return {...self};
   if(method==='player.getInventory')return inventory;
   if(method==='fish.equip'){inventory.selectedSlot=1;return {};}
-  if(method==='perception.entities')return {entities:missing?[]:[{...target,distance:Math.abs(target.x-self.x)}]};
+  if(method==='perception.entities'){
+   if(args.kinds?.includes('item'))return {entities:loot&&hp<=0?[{x:target.x,y:64,z:0,item:{id:'minecraft:ender_pearl',count:1}}]:[]};
+   return {entities:missing?[]:[{...target,distance:Math.abs(target.x-self.x)}]};
+  }
   if(method==='fish.navigationStatus')return {active:Boolean(nav)};
-  if(method==='fish.navigate'){nav=args;moves++;return {};}
+  if(method==='fish.navigate'){nav=args;moves++;if(loot&&hp<=0)inventory.main.push({id:'minecraft:ender_pearl',count:1});return {};}
   if(method==='fish.attack'){
+   if(movedOutOfReach)throw Error('Target is out of melee reach.');
    if(missing)return {missing:true};if(hp<=0)return {deathObserved:true};
    if(blocked)throw Error('Target is obstructed; move to a clear line of sight.');
    if(Math.abs(target.x-self.x)>2.5)throw Error('Target is out of melee reach.');
@@ -27,8 +31,15 @@ test('连续追踪移动目标并挥击，不逐步请求模型；只有原生�
  const f=fixture(),r=await fightEntity({uuid,weapon:'stone_sword',seconds:30},f);
  assert.equal(r.status,'succeeded');assert.equal(r.deathObserved,true);assert.equal(r.attacks,2);assert.equal(r.weapon,'minecraft:stone_sword');assert.ok(f.counts().moves>1);assert.ok(f.counts().cancels>=2);
 });
+test('已确认击杀后才寻找指定掉落，背包实际增加才算拾取',async()=>{
+ for(const loot of [true,false]){
+  const result=await fightEntity({uuid,loot:'ender_pearl'},fixture({loot}));
+  assert.equal(result.deathObserved,true);
+  assert.deepEqual(result.loot,{item:'minecraft:ender_pearl',gained:loot?1:0});
+ }
+});
 test('目标消失、低血、无法接近、爆炸目标均交回，不虚报击杀',async()=>{
- for(const [options,reason] of [[{missing:true},'target_missing'],[{health:7},'player_danger'],[{stationary:true},'no_progress'],[{kind:'minecraft:creeper'},'explosive_target_requires_other_tactic']]){
+ for(const [options,reason] of [[{missing:true},'target_missing'],[{missing:true,movedOutOfReach:true},'target_missing'],[{health:7},'player_danger'],[{stationary:true},'no_progress'],[{kind:'minecraft:creeper'},'explosive_target_requires_other_tactic']]){
   const f=fixture(options),r=await fightEntity({uuid},f);assert.equal(r.status,'interrupted');assert.equal(r.reason,reason);assert.equal(r.deathObserved,false);assert.equal(f.counts().attacks,0);
  }
 });

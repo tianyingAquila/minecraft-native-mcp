@@ -3,12 +3,13 @@ import { mineBlock } from './mining.mjs';
 
 const DIRECTIONS = {north:[0,-1], south:[0,1], west:[-1,0], east:[1,0]};
 const HAZARD = /(?:^|:)(?:lava|water|fire|soul_fire|magma_block|campfire|soul_campfire|cactus|powder_snow|sweet_berry_bush)$/;
-class TunnelStop extends Error { constructor(reason) { super(reason); this.reason=reason; } }
-const stop = reason => { throw new TunnelStop(reason); };
+const PICKAXE_RANK = ['minecraft:netherite_pickaxe', 'minecraft:diamond_pickaxe', 'minecraft:iron_pickaxe', 'minecraft:stone_pickaxe', 'minecraft:golden_pickaxe', 'minecraft:wooden_pickaxe'];
+class TunnelStop extends Error { constructor(reason, extra = null) { super(reason); this.reason=reason; this.extra=extra; } }
+const stop = (reason, extra = null) => { throw new TunnelStop(reason, extra); };
 const same = (a,b) => a.x===b.x && a.y===b.y && a.z===b.z;
 
 // A finite mechanical action. Direction, depth and whether to continue belong to the model.
-export async function digTunnel(args, {call, signal, discover, sleep = ms => delay(ms, undefined, {signal}), now = Date.now} = {}) {
+export async function digTunnel(args, {call, signal, discover, placeFloor, equip, mergeInventory, sleep = ms => delay(ms, undefined, {signal}), now = Date.now} = {}) {
   const vector = DIRECTIONS[args.direction], length=args.length, slope=args.slope??'level';
   if (!vector || !Number.isInteger(length) || length<1 || length>12 || !['level','down','up'].includes(slope)) throw new Error('矿道方向限north/south/east/west，长度1–12格，坡度level/down/up');
   const started=now(), deadline=started+90000;
@@ -16,7 +17,7 @@ export async function digTunnel(args, {call, signal, discover, sleep = ms => del
   let initial, stepPositions, floor, cut, lastSelf;
   let discoveryStart;
   const checkDiscovery=async()=>{if(!discover)return;const found=await discover(discoveryStart);if(found.updates?.some(e=>e.salient)){result.discovery=found;stop('new_environment');}};
-  const guard = async () => {
+  const guard = async ({ allowEmptyFloor = false, requirePickaxe = true } = {}) => {
     signal?.throwIfAborted();
     if (now()>=deadline) stop('time_budget');
     const self=await call('player.getState'); lastSelf=self;
@@ -28,7 +29,11 @@ export async function digTunnel(args, {call, signal, discover, sleep = ms => del
     if (blocks.length!==stepPositions.length || blocks.some(b=>!b.loaded)) stop('unloaded_area');
     if (blocks.some(b=>b.fluid || HAZARD.test(b.id))) stop('fluid_or_hazard');
     const support=blocks.find(b=>same(b,floor));
-    if (!support?.fullSupport || support.falling) stop('unsupported_floor');
+    if (!support?.fullSupport || support.falling) {
+      if (!allowEmptyFloor || !support?.air) {
+        stop('unsupported_floor', { missingFloor: floor, message: `前方落脚格(${floor.x},${floor.y},${floor.z})缺少完整支撑（当前为${support?.id || 'unknown'}）。` });
+      }
+    }
     const above=blocks.find(b=>b.x===floor.x && b.z===floor.z && b.y===cut[0].y+1);
     if (above?.falling) stop('falling_ceiling');
     for (const pos of cut) {
@@ -36,10 +41,33 @@ export async function digTunnel(args, {call, signal, discover, sleep = ms => del
       if (block.falling || block.blockEntity || block.hardness<0) {result.obstacle={id:block.id,position:pos,falling:block.falling,blockEntity:block.blockEntity,hardness:block.hardness};stop('unsafe_or_protected_block');}
       if(blocks.find(b=>b.x===pos.x&&b.z===pos.z&&b.y===pos.y+1)?.falling)stop('falling_ceiling');
     }
-    const inv=await call('player.getInventory');
-    if ([...inv.hotbar,...inv.main].length>=36) stop('inventory_full');
-    const held=inv.hotbar.find(i=>i.slot===inv.selectedSlot);
-    if (held?.maxDamage && held.maxDamage-(held.damage??0)<=3) stop('tool_nearly_broken');
+    let inv=await call('player.getInventory');
+    if ([...inv.hotbar,...inv.main].length>=36) {
+      if (mergeInventory) {
+        await mergeInventory();
+        inv = await call('player.getInventory');
+      }
+      if ([...inv.hotbar,...inv.main].length>=36) {
+        stop('inventory_full', { message: '背包已满(36/36)；请先调 organize_inventory 合并零碎堆叠，或用 drop_items(slot, wholeStack: true) 整组丢弃多余圆石/杂石腾出空槽。' });
+      }
+    }
+    if (requirePickaxe) {
+      const held=inv.hotbar.find(i=>i.slot===inv.selectedSlot);
+      const lowHeld = held?.maxDamage && held.maxDamage-(held.damage??0)<=3;
+      if (lowHeld) {
+        const stacks=[...inv.hotbar,...inv.main];
+        let replacement=null;
+        for (const id of PICKAXE_RANK) {
+          replacement=stacks.find(s=>s.id===id && (!s.maxDamage || s.maxDamage-(s.damage??0)>3));
+          if (replacement) break;
+        }
+        if (replacement && equip) {
+          await equip(replacement.slot);
+        } else if (/diamond|netherite/.test(held.id || '')) {
+          stop('tool_nearly_broken', { message: '贵重镐剩余耐久不足 3，已保护性停止；请更换备用镐或合成新镐。' });
+        }
+      }
+    }
     return blocks;
   };
   try {
@@ -58,22 +86,34 @@ export async function digTunnel(args, {call, signal, discover, sleep = ms => del
       if(slope==='up')cut.unshift({x:feet.x-vector[0],y:feet.y+1,z:feet.z-vector[1]});
       stepPositions=[];
       for(let x=feet.x-1;x<=feet.x+1;x++)for(let z=feet.z-1;z<=feet.z+1;z++)for(let y=feet.y-1;y<=top+1;y++)stepPositions.push({x,y,z});
+      const initialProbe = await guard({ allowEmptyFloor: Boolean(placeFloor), requirePickaxe: false });
+      const initialSupport = initialProbe.find(b=>same(b,floor));
+      if ((!initialSupport?.fullSupport || initialSupport.falling) && initialSupport?.air && placeFloor) {
+        try {
+          await placeFloor(floor);
+          result.placedFloors = (result.placedFloors || 0) + 1;
+        } catch (placeErr) {
+          signal?.throwIfAborted();
+          stop('unsupported_floor', { missingFloor: floor, message: `前方落脚格(${floor.x},${floor.y},${floor.z})为空且自动垫块失败：${placeErr.message}` });
+        }
+      }
       for (const pos of cut) {
-        const blocks=await guard(), block=blocks.find(b=>same(b,pos));
+        const blocks=await guard({ requirePickaxe: false }), block=blocks.find(b=>same(b,pos));
         if (!block.air) {
-          const broke=await mineBlock(call,pos,{signal,check:guard,sleep});
+          await guard({ requirePickaxe: true });
+          const broke=await mineBlock(call,pos,{signal,check:() => guard({ requirePickaxe: true }),sleep});
           result.brokenBlocks++;
           if (/_ore$|ancient_debris$/.test(broke.broke)) result.encountered.push({id:broke.broke,position:pos});
           await call('fish.cancel');
           await checkDiscovery();
         }
       }
-      const beforeWalk=await guard();
+      const beforeWalk=await guard({ requirePickaxe: false });
       if(cut.some(pos=>!beforeWalk.find(b=>same(b,pos))?.air)) stop('passage_not_clear');
       const moveUntil=Math.min(deadline,now()+5000);
       let closest=Infinity, movedAt=now();
       while (true) {
-        await guard();
+        await guard({ requirePickaxe: false });
         const distance=Math.hypot(lastSelf.x-feet.x-.5,lastSelf.z-feet.z-.5);
         if(distance<=.2 && Math.abs(lastSelf.y-feet.y)<.2) break;
         if(now()>=moveUntil || now()-movedAt>1500) stop('movement_stalled');
@@ -93,7 +133,10 @@ export async function digTunnel(args, {call, signal, discover, sleep = ms => del
     signal?.throwIfAborted();
     if (!(error instanceof TunnelStop)) {
       result.reason='action_failed'; result.message=String(error.message).slice(0,500);
-    } else result.reason=error.reason;
+    } else {
+      result.reason=error.reason;
+      if (error.extra) Object.assign(result, error.extra);
+    }
   }
   result.position=lastSelf&&{x:lastSelf.x,y:lastSelf.y,z:lastSelf.z};
   result.elapsedMs=now()-started;

@@ -1,7 +1,7 @@
 // The API reports exact usage only after a request. Growth is bounded by UTF-8
 // bytes, not mislabeled as exact tokens; image base64 is never counted as text.
-export const CONTEXT_TRIGGER_TOKENS = 500000;
-export const RECENT_TOKENS = 100000;
+export const CONTEXT_TRIGGER_TOKENS = 100000;
+export const RECENT_TOKENS = 24000;
 export const MEMORY_MAX_CHARS = 16000;
 
 export function contextSize(body) {

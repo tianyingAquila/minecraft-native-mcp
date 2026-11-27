@@ -2,7 +2,7 @@ import { Store } from "./state.mjs";
 import { Minecraft } from "./minecraft.mjs";
 
 import { Agent } from "./agent.mjs";
-import { fetchBalance } from "./deepseek.mjs";
+import { fetchBalance, bailianFallbackConfig } from "./deepseek.mjs";
 
 import { NativeClient } from "./native-client.mjs";
 import { ClientActions } from "./client-actions.mjs";
@@ -91,8 +91,27 @@ export class Runtime {
       try {
         if(requireModel){
           this.store.reason='正在核对 DSH 的 DeepSeek API 配置与余额。';
-          const balance=await this.refreshBalance();
-          if(!balance.available||balance.micros<1000000)throw new Error('DeepSeek 账户不可用或余额不足 ¥1，请在 DSH 配置官方API凭据并充值。');
+          const fallback = bailianFallbackConfig();
+          try {
+            const balance=await this.refreshBalance();
+            if(!balance.available||balance.micros<1000000){
+              if (fallback) {
+                this.store.modelProvider = "bailian";
+                this.store.event("官方 DeepSeek 余额不足 ¥1，已切换至阿里云百炼 " + fallback.model + "。");
+              } else {
+                throw new Error('DeepSeek 账户不可用或余额不足 ¥1，请在 DSH 配置官方API凭据并充值。');
+              }
+            } else {
+              this.store.modelProvider = "official";
+            }
+          } catch (e) {
+            if (fallback) {
+              this.store.modelProvider = "bailian";
+              this.store.event("官方余额检查失败，已切换至阿里云百炼 " + fallback.model + "：" + e.message);
+            } else {
+              throw e;
+            }
+          }
         }
         await this.observer.close();
         await this.mcp.close();
@@ -157,7 +176,7 @@ export class Runtime {
     if(this.store.persist)saveSettings(this.store.settings);
     this.agent.load();this.agent.seenDiscoveries.clear();this.agent.currentSnapshot=null;
     const saved=readWorldSession(this.store.settings);
-    Object.assign(this.store,{status:'stopped',goal:saved.goal||'准备踏上击杀末影龙的旅程',runningMs:Number(saved.runningMs)||0,startedAt:null,health:null,hunger:null,position:null,inventory:[],deaths:Number(saved.deaths)||0,usage:saved.usage||{prompt:0,completion:0,cached:0},spatial:null,connected:false,tools:0,calls:0,lastRequest:null,performance:{},commentary:null,reaction:null,reply:null});
+    Object.assign(this.store,{status:'stopped',goal:saved.goal||'准备踏上击杀末影龙的旅程',advisor:null,runningMs:Number(saved.runningMs)||0,startedAt:null,health:null,hunger:null,position:null,inventory:[],deaths:Number(saved.deaths)||0,usage:saved.usage||{prompt:0,completion:0,cached:0},spatial:null,connected:false,tools:0,calls:0,lastRequest:null,performance:{},commentary:null,reaction:null,reply:null});
     this.store.setup.reset();this.store.environment=null;this.vision?.clear();
     this.store.reason='已选择“'+info.name+'”，点击准备游戏'+(info.generated?'继续存档。':'生成新地图。');
     this.store.event(this.store.reason);return info;
@@ -198,10 +217,28 @@ export class Runtime {
     if (this.agent.task) await this.agent.task;
     if (this.pauseTask) await this.pauseTask;
     if (!this.mcp.client) await this.prepare();
-    await this.refreshBalance();
-    if (epoch !== this.lifecycle) return;
-    if (this.store.balance.micros < 1e6)
-      throw new Error("人民币总余额低于 1 元，请充值后再开始。");
+    const fallback = bailianFallbackConfig();
+    if (this.store.modelProvider !== "bailian") {
+      try {
+        await this.refreshBalance();
+        if (epoch !== this.lifecycle) return;
+        if (this.store.balance.micros < 1e6) {
+          if (fallback) {
+            this.store.modelProvider = "bailian";
+            this.store.event("官方 DeepSeek 余额低于 1 元，已自动切换至阿里云百炼 " + fallback.model + "。");
+          } else {
+            throw new Error("人民币总余额低于 1 元，请充值后再开始。");
+          }
+        }
+      } catch (e) {
+        if (fallback) {
+          this.store.modelProvider = "bailian";
+          this.store.event("官方余额检查失败，已自动切换至阿里云百炼 " + fallback.model + "：" + e.message);
+        } else {
+          throw e;
+        }
+      }
+    }
     if (this.store.remaining() <= 0) this.store.runningMs = 0;
     if (epoch !== this.lifecycle) return;
     this.minecraft.resume();

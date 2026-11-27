@@ -58,6 +58,15 @@
               保存并停止</button
             ><button data-action="observer">打开游戏画面</button>
           </div>
+          <form id="advisor-form" class="advisor-box">
+            <label for="advisor-input">外部宏观建议（可选，留空则完全不干扰 AI）</label>
+            <div class="advisor-row">
+              <input id="advisor-input" type="text" maxlength="500" placeholder="例如：先去 Y=-58 挖3颗钻石做钻石镐，再找岩浆用 make_obsidian 采黑曜石" autocomplete="off" />
+              <button id="advisor-send" type="submit" class="secondary">发送建议</button>
+              <button id="advisor-clear" type="button">清空</button>
+            </div>
+            <p id="advisor-active" class="field-help">当前无外部建议，AI 自主决策中。</p>
+          </form>
           <div class="session">
             <div>
               <span>本场剩余</span><strong id="remaining">02:00:00</strong>
