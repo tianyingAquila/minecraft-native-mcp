@@ -30,7 +30,7 @@ const countItem = (inv, id) => stacks(inv).filter(s => s.id === id).reduce((sum,
 const oreFamily = id => String(id || '').replace(/^minecraft:/, '').replace(/^deepslate_/, '');
 const keyOf = p => `${p.x},${p.y},${p.z}`;
 
-function buildCandidates(px, py, pz, tx, ty, tz, blocked, preferToggle) {
+function buildCandidates(px, py, pz, tx, ty, tz, blocked, preferToggle, {prevCellKey = null, visitedCount = new Map()} = {}) {
   const dx = tx - px;
   const dy = ty - py;
   const dz = tz - pz;
@@ -58,7 +58,10 @@ function buildCandidates(px, py, pz, tx, ty, tz, blocked, preferToggle) {
     if (blocked.has(k)) return;
     const clamped = Math.max(1, Math.min(8, Math.round(length)));
     if (!candidates.some(c => c.direction === direction && c.slope === slope)) {
-      candidates.push({direction, slope, length: clamped});
+      const [vx, vz] = DIR_VEC[direction];
+      const sy = slope === 'up' ? 1 : slope === 'down' ? -1 : 0;
+      const nextKey = `${px + vx},${py + sy},${pz + vz}`;
+      candidates.push({direction, slope, length: clamped, nextKey});
     }
   };
 
@@ -72,28 +75,50 @@ function buildCandidates(px, py, pz, tx, ty, tz, blocked, preferToggle) {
         add(dir, wantSlope, Math.min(4, Math.max(2, absY)));
       }
     }
-    // Fallback: zig-zag other directions on desired slope, or sidestep level to bypass lava/gaps
+    // Sidestep level toward target before zig-zagging backwards
+    for (const {dir, progress, axisDist} of scoredDirs) {
+      if (progress > 0) add(dir, 'level', Math.min(4, Math.max(2, axisDist)));
+    }
     for (const {dir} of scoredDirs) {
       add(dir, wantSlope, Math.min(4, Math.max(2, absY)));
     }
-    for (const {dir, progress, axisDist} of scoredDirs) {
-      add(dir, 'level', progress > 0 ? Math.min(4, Math.max(2, axisDist)) : 2);
+    for (const {dir} of scoredDirs) {
+      add(dir, 'level', 2);
+    }
+    const oppSlope = wantSlope === 'up' ? 'down' : 'up';
+    for (const {dir, progress} of scoredDirs) {
+      if (progress > 0) add(dir, oppSlope, 2);
     }
   } else {
     for (const {dir, progress, axisDist} of scoredDirs) {
       if (progress > 0) add(dir, 'level', Math.min(8, Math.max(1, axisDist)));
     }
-    for (const {dir} of scoredDirs) {
-      add(dir, 'level', 2);
-    }
+    // Bypass forward obstacles (lava/gaps/water) by stepping up or down before walking backwards
     for (const {dir, progress} of scoredDirs) {
       if (progress > 0) {
         add(dir, 'up', 2);
         add(dir, 'down', 2);
       }
     }
+    for (const {dir} of scoredDirs) {
+      add(dir, 'level', 2);
+    }
+    for (const {dir} of scoredDirs) {
+      add(dir, 'up', 2);
+      add(dir, 'down', 2);
+    }
   }
-  return candidates;
+
+  const tierOf = c => {
+    const visits = visitedCount.get(c.nextKey) || 0;
+    if (c.nextKey !== prevCellKey && visits === 0) return 0;
+    if (c.nextKey !== prevCellKey && visits === 1) return 1;
+    return 2;
+  };
+  return candidates
+    .map((c, idx) => ({c, idx, tier: tierOf(c)}))
+    .sort((a, b) => (a.tier - b.tier) || (a.idx - b.idx))
+    .map(x => x.c);
 }
 
 async function probeChunked(call, positions) {
@@ -193,16 +218,30 @@ export async function digToPosition(
 
   const started = now();
   const deadline = started + seconds * 1000;
-  const blocked = new Set();
-  let lastCellKey = '';
+  const blockedByCell = new Map();
+  const visitedCount = new Map();
+  const getBlocked = k => {
+    let s = blockedByCell.get(k);
+    if (!s) {
+      s = new Set();
+      blockedByCell.set(k, s);
+    }
+    return s;
+  };
+  let currentCellKey = null;
+  let prevCellKey = null;
   let toggle = 0;
   let totalSteps = 0;
   let totalBroken = 0;
   let segments = 0;
   let lastReason = null;
   let lastMessage = null;
+  let lastObstacleReason = null;
+  let lastObstacleMessage = null;
   let reached = false;
   let self = start;
+  let bestDist = Math.hypot(tx - Math.floor(start.x), ty - Math.floor(start.y), tz - Math.floor(start.z));
+  let noProgressSegments = 0;
 
   const isCloseEnough = s => {
     const px = Math.floor(s.x), py = Math.floor(s.y), pz = Math.floor(s.z);
@@ -227,19 +266,26 @@ export async function digToPosition(
     }
     const px = Math.floor(self.x), py = Math.floor(self.y), pz = Math.floor(self.z);
     const cellKey = `${px},${py},${pz}`;
-    if (cellKey !== lastCellKey) {
-      blocked.clear();
-      lastCellKey = cellKey;
+    if (cellKey !== currentCellKey) {
+      prevCellKey = currentCellKey;
+      currentCellKey = cellKey;
+      visitedCount.set(cellKey, (visitedCount.get(cellKey) || 0) + 1);
     }
+    const cellBlocked = getBlocked(cellKey);
 
-    const candidates = buildCandidates(px, py, pz, tx, ty, tz, blocked, toggle);
+    const candidates = buildCandidates(px, py, pz, tx, ty, tz, cellBlocked, toggle, {prevCellKey, visitedCount});
     if (!candidates.length) {
-      lastReason = lastReason || 'blocked_all_directions';
-      lastMessage = lastMessage || '四周方向均受障碍阻挡（岩浆/空洞/不可挖方块），请查看周围后换路线。';
+      lastReason = lastObstacleReason || lastReason || 'blocked_all_directions';
+      lastMessage = lastObstacleMessage || lastMessage || '四周方向均受障碍阻挡（岩浆/空洞/不可挖方块），请查看周围后换路线。';
       break;
     }
 
     const pick = candidates[0];
+    if (noProgressSegments >= 6 && (visitedCount.get(pick.nextKey) || 0) >= 2) {
+      lastReason = lastObstacleReason || 'path_blocked_loop';
+      lastMessage = lastObstacleMessage || '前方存在持续障碍且绕行会回到原格，已停止原地往返，请调整目标高度或换路线。';
+      break;
+    }
     toggle++;
     segments++;
     const seg = await dig({direction: pick.direction, slope: pick.slope, length: pick.length});
@@ -247,6 +293,10 @@ export async function digToPosition(
     totalBroken += seg.brokenBlocks || 0;
     lastReason = seg.reason || null;
     lastMessage = seg.message || null;
+    if (seg.reason && seg.reason !== 'requested_length_reached' && seg.reason !== 'time_budget') {
+      lastObstacleReason = seg.reason;
+      if (seg.message) lastObstacleMessage = seg.message;
+    }
 
     self = await call('player.getState');
     if (isCloseEnough(self)) {
@@ -257,8 +307,22 @@ export async function digToPosition(
     if (FATAL_REASONS.has(seg.reason)) break;
     if (seg.reason === 'time_budget') continue;
     if (seg.reason === 'action_failed' && /无法得到该方块的掉落/.test(seg.message || '')) break;
-    if ((seg.completedSteps || 0) === 0 && seg.status !== 'completed') {
-      blocked.add(`${pick.direction}:${pick.slope}`);
+
+    const afterKey = `${Math.floor(self.x)},${Math.floor(self.y)},${Math.floor(self.z)}`;
+    const afterDist = Math.hypot(tx - Math.floor(self.x), ty - Math.floor(self.y), tz - Math.floor(self.z));
+    if (afterDist < bestDist - 0.5) {
+      bestDist = afterDist;
+      noProgressSegments = 0;
+    } else {
+      noProgressSegments++;
+    }
+    if (((seg.completedSteps || 0) === 0 && seg.status !== 'completed') || afterKey === cellKey) {
+      cellBlocked.add(`${pick.direction}:${pick.slope}`);
+    }
+    if (noProgressSegments >= 10) {
+      lastReason = lastObstacleReason || 'path_blocked_loop';
+      lastMessage = lastObstacleMessage || '连续绕行多段未拉近目标距离，已提前停止避免原地空转，请换高度或使用其他路线。';
+      break;
     }
   }
 

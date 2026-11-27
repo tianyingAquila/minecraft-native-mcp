@@ -64,19 +64,75 @@ async function approachPoint(call, target, reach, deadline, signal, sleep, now =
   }
 }
 
-async function findWaterPlacementNextToLava(call, lavaPos) {
+async function findWaterPlacementsNextToLava(call, lavaPos, playerPos) {
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const candidates = dirs.map(([dx, dz]) => ({x: lavaPos.x + dx, y: lavaPos.y, z: lavaPos.z + dz}));
-  const probePos = candidates.flatMap(p => [p, {x: p.x, y: p.y + 1, z: p.z}]);
+  const probePos = [
+    {x: lavaPos.x, y: lavaPos.y + 1, z: lavaPos.z},
+    {x: lavaPos.x, y: lavaPos.y + 2, z: lavaPos.z},
+    ...candidates.flatMap(p => [p, {x: p.x, y: p.y + 1, z: p.z}, {x: p.x, y: p.y + 2, z: p.z}]),
+  ];
   const {blocks = []} = await call('fish.probeBlocks', {positions: probePos});
-  for (let i = 0; i < candidates.length; i++) {
-    const base = blocks[i * 2];
-    const above = blocks[i * 2 + 1];
-    if (base?.loaded && base.fullSupport && !base.fluid && above?.loaded && above.air) {
-      return base;
+  const aboveLava = blocks[0];
+  const aboveLava2 = blocks[1];
+  let lavaRoofBlock = null;
+  if (aboveLava?.loaded && !aboveLava.air) {
+    if (!aboveLava.fluid && !aboveLava.falling && !aboveLava.blockEntity && (aboveLava.hardness ?? 0) >= 0 && (aboveLava.hardness ?? 0) <= 6 && !aboveLava2?.fluid && !aboveLava2?.falling) {
+      lavaRoofBlock = aboveLava;
+    } else {
+      return [];
     }
   }
-  return null;
+  const ready = [];
+  const needWindow = [];
+  for (let i = 0; i < candidates.length; i++) {
+    const base = blocks[2 + i * 3];
+    const above = blocks[2 + i * 3 + 1];
+    const above2 = blocks[2 + i * 3 + 2];
+    if (!base?.loaded || !base.fullSupport || base.fluid || !above?.loaded) continue;
+    if (above.air) {
+      ready.push({base, windowBlock: null, lavaRoofBlock});
+    } else if (!above.fluid && !above.falling && !above.blockEntity && (above.hardness ?? 0) >= 0 && (above.hardness ?? 0) <= 6 && !above2?.fluid && !above2?.falling) {
+      needWindow.push({base, windowBlock: above, lavaRoofBlock});
+    }
+  }
+  const distToPlayer = item => playerPos
+    ? Math.hypot(item.base.x + 0.5 - playerPos.x, item.base.y - playerPos.y, item.base.z + 0.5 - playerPos.z)
+    : 0;
+  ready.sort((a, b) => distToPlayer(a) - distToPlayer(b));
+  needWindow.sort((a, b) => distToPlayer(a) - distToPlayer(b));
+  return [...ready, ...needWindow];
+}
+
+async function tryClearUpperBlocker(err, minSafeY, call, mine, {signal, sleep}) {
+  const msg = String(err?.message || '');
+  const m = msg.match(/first hit\s+([a-z0-9_:]+)\s*@\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)/i);
+  if (!m) return false;
+  if (/lava|water|bedrock|spawner|chest|furnace|obsidian/i.test(m[1])) return false;
+  const blocker = {x: Number(m[2]), y: Number(m[3]), z: Number(m[4])};
+  // Never mine a block at or below lava level (it may be holding back lava!).
+  if (blocker.y <= minSafeY) return false;
+  try {
+    await mine(call, blocker, {signal, sleep});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function emergencyExtinguish(call, state, inv, sleep) {
+  try {
+    const wb = stacks(inv).find(s => s.id === WATER_BUCKET);
+    if (!wb) return;
+    await call('fish.equip', {slot: wb.slot, hotbarSlot: 7});
+    await call('fish.useBlock', {
+      x: Math.floor(state.x),
+      y: Math.floor(state.y) - 1,
+      z: Math.floor(state.z),
+      face: 'up',
+    });
+    await sleep(250);
+  } catch {}
 }
 
 export async function makeObsidian(args = {}, {call, signal, mine = mineBlock, now = Date.now, sleep = ms => delay(ms, undefined, {signal})} = {}) {
@@ -134,6 +190,9 @@ export async function makeObsidian(args = {}, {call, signal, mine = mineBlock, n
         return {status: 'succeeded', reason: 'target_reached', gained, totalObsidian, targetCount: count, castCount, minedPositions};
       }
       if (state.dimension !== initial.dimension || state.health <= 10 || state.inLava) {
+        if (state.inLava && state.dimension === 'minecraft:overworld') {
+          await emergencyExtinguish(call, state, inv, sleep);
+        }
         return {status: 'interrupted', reason: 'player_danger', gained, totalObsidian, targetCount: count, castCount, minedPositions};
       }
       const currentPick = findObsidianPickaxe(inv);
@@ -145,7 +204,9 @@ export async function makeObsidian(args = {}, {call, signal, mine = mineBlock, n
         ? {x: args.x, y: args.y, z: args.z}
         : state;
       const {obsidianBlocks, lavaBlocks} = await scanCandidates(call, center, radius);
-      let targetObs = obsidianBlocks.find(b => !skipped.has(keyOf(b)));
+      const isDirectlyUnderFeet = b =>
+        b.x === Math.floor(state.x) && b.z === Math.floor(state.z) && b.y === Math.floor(state.y) - 1;
+      let targetObs = obsidianBlocks.find(b => !skipped.has(keyOf(b)) && !isDirectlyUnderFeet(b));
 
       if (!targetObs) {
         const candidateLava = lavaBlocks.find(b => !skipped.has(keyOf(b)));
@@ -169,25 +230,70 @@ export async function makeObsidian(args = {}, {call, signal, mine = mineBlock, n
         if (!waterBucket) {
           return {status: 'interrupted', reason: 'need_water_bucket', gained, totalObsidian, targetCount: count, castCount, minedPositions, message: '附近只有岩浆，需要水桶（water_bucket）倒水凝固成黑曜石。'};
         }
-        const support = await findWaterPlacementNextToLava(call, candidateLava);
-        if (!support) {
+        const placements = await findWaterPlacementsNextToLava(call, candidateLava, state);
+        if (!placements.length) {
           skipped.add(keyOf(candidateLava));
           continue;
         }
-        const near = await approachPoint(call, support, 3.5, deadline, signal, sleep, now);
-        if (!near) {
+        let poured = false;
+        for (const {base: support, windowBlock, lavaRoofBlock} of placements) {
+          if (now() >= deadline) break;
+          const near = await approachPoint(call, support, 3.5, deadline, signal, sleep, now);
+          if (!near) continue;
+          if (windowBlock) {
+            try {
+              await mine(call, windowBlock, {signal, sleep});
+            } catch {
+              continue;
+            }
+          }
+          if (lavaRoofBlock) {
+            try {
+              await mine(call, lavaRoofBlock, {signal, sleep});
+            } catch {
+              continue;
+            }
+          }
+          await call('fish.equip', {slot: waterBucket.slot, hotbarSlot: 7});
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              await call('fish.useBlock', {x: support.x, y: support.y, z: support.z, face: 'up'});
+              waterPlacedAt = support;
+              poured = true;
+              break;
+            } catch (useErr) {
+              signal?.throwIfAborted();
+              if (attempt === 0 && await tryClearUpperBlocker(useErr, candidateLava.y, call, mine, {signal, sleep})) {
+                await call('fish.equip', {slot: waterBucket.slot, hotbarSlot: 7});
+                continue;
+              }
+              break;
+            }
+          }
+          if (poured) break;
+        }
+        if (!poured) {
           skipped.add(keyOf(candidateLava));
           continue;
         }
-        await call('fish.equip', {slot: waterBucket.slot, hotbarSlot: 7});
-        await call('fish.useBlock', {x: support.x, y: support.y, z: support.z, face: 'up'});
-        waterPlacedAt = support;
-        await sleep(500);
+        const checkPositions = [
+          {x: candidateLava.x, y: candidateLava.y, z: candidateLava.z},
+          {x: candidateLava.x + 1, y: candidateLava.y, z: candidateLava.z},
+          {x: candidateLava.x - 1, y: candidateLava.y, z: candidateLava.z},
+          {x: candidateLava.x, y: candidateLava.y, z: candidateLava.z + 1},
+          {x: candidateLava.x, y: candidateLava.y, z: candidateLava.z - 1},
+        ];
+        let formedObs = null;
+        for (let poll = 0; poll < 6; poll++) {
+          await sleep(250);
+          const probed = (await call('fish.probeBlocks', {positions: checkPositions})).blocks || [];
+          formedObs = probed.find(b => b?.id === OBSIDIAN_ID && !skipped.has(keyOf(b))) || null;
+          if (formedObs && poll >= 2) break;
+        }
         await reclaimWater();
-        const afterCast = (await call('fish.probeBlocks', {positions: [{x: candidateLava.x, y: candidateLava.y, z: candidateLava.z}]})).blocks?.[0];
-        if (afterCast?.id === OBSIDIAN_ID) {
+        if (formedObs) {
           castCount++;
-          targetObs = afterCast;
+          targetObs = formedObs;
         } else {
           skipped.add(keyOf(candidateLava));
           continue;
@@ -208,12 +314,17 @@ export async function makeObsidian(args = {}, {call, signal, mine = mineBlock, n
       if (lavaAdjacent && state.dimension === 'minecraft:overworld') {
         const wb = stacks(await call('player.getInventory')).find(s => s.id === WATER_BUCKET);
         if (wb) {
-          const support = await findWaterPlacementNextToLava(call, targetObs);
-          if (support && await approachPoint(call, support, 3.5, deadline, signal, sleep, now)) {
-            await call('fish.equip', {slot: wb.slot, hotbarSlot: 7});
-            await call('fish.useBlock', {x: support.x, y: support.y, z: support.z, face: 'up'});
-            waterPlacedAt = support;
-            await sleep(300);
+          const safeSupports = await findWaterPlacementsNextToLava(call, targetObs, state);
+          for (const {base: support, windowBlock} of safeSupports) {
+            if (windowBlock) continue;
+            if (!await approachPoint(call, support, 3.5, deadline, signal, sleep, now)) continue;
+            try {
+              await call('fish.equip', {slot: wb.slot, hotbarSlot: 7});
+              await call('fish.useBlock', {x: support.x, y: support.y, z: support.z, face: 'up'});
+              waterPlacedAt = support;
+              await sleep(300);
+              break;
+            } catch {}
           }
         }
       }
@@ -225,23 +336,38 @@ export async function makeObsidian(args = {}, {call, signal, mine = mineBlock, n
       }
       await call('fish.equip', {slot: currentPick.slot, hotbarSlot: 7});
       const beforeCount = countItem(await call('player.getInventory'), OBSIDIAN_ID);
-      try {
-        await mine(call, targetObs, {
-          signal,
-          sleep,
-          check: async () => {
-            const s = await call('player.getState');
-            if (s.health <= 10 || s.inLava) throw Error('player_danger');
-          },
-        });
-        minedPositions.push({x: targetObs.x, y: targetObs.y, z: targetObs.z});
-      } catch (err) {
-        signal?.throwIfAborted();
-        if (err.message === 'player_danger') {
-          const invNow = await call('player.getInventory');
-          const total = countItem(invNow, OBSIDIAN_ID);
-          return {status: 'interrupted', reason: 'player_danger', gained: Math.max(0, total - startObsidian), totalObsidian: total, targetCount: count, castCount, minedPositions};
+      let minedOk = false;
+      for (let attempt = 0; attempt < 2 && !minedOk; attempt++) {
+        try {
+          await mine(call, targetObs, {
+            signal,
+            sleep,
+            check: async () => {
+              const s = await call('player.getState');
+              if (s.health <= 10 || s.inLava) throw Error('player_danger');
+            },
+          });
+          minedPositions.push({x: targetObs.x, y: targetObs.y, z: targetObs.z});
+          minedOk = true;
+        } catch (err) {
+          signal?.throwIfAborted();
+          if (err.message === 'player_danger') {
+            const sNow = await call('player.getState');
+            const invNow = await call('player.getInventory');
+            if (sNow.inLava && sNow.dimension === 'minecraft:overworld') {
+              await emergencyExtinguish(call, sNow, invNow, sleep);
+            }
+            const total = countItem(invNow, OBSIDIAN_ID);
+            return {status: 'interrupted', reason: 'player_danger', gained: Math.max(0, total - startObsidian), totalObsidian: total, targetCount: count, castCount, minedPositions};
+          }
+          if (attempt === 0 && await tryClearUpperBlocker(err, targetObs.y, call, mine, {signal, sleep})) {
+            await call('fish.equip', {slot: currentPick.slot, hotbarSlot: 7});
+            continue;
+          }
+          break;
         }
+      }
+      if (!minedOk) {
         skipped.add(keyOf(targetObs));
         continue;
       }

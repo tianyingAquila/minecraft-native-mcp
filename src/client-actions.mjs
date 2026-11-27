@@ -225,6 +225,11 @@ const CUSTOM = [
     inputSchema: schema(),
   },
 ];
+const PASSIVE_NAV_AVOID_HOSTILES = /(?:^|:)(?:zombified_piglin|enderman|piglin|iron_golem|wolf|bee)$/;
+export function filterNavGuardEntities(entities) {
+  return (entities || []).filter(e => !PASSIVE_NAV_AVOID_HOSTILES.test(String(e?.type || '')));
+}
+
 export class ClientActions {
   constructor({ bridge = null, store = null, nativeClient = null } = {}) {
     this.kind = "native";
@@ -320,6 +325,9 @@ export class ClientActions {
           await this.bridge.call("fish.cancel");
         signal?.throwIfAborted();
         const value = await this.bridge.call(method, args, {signal});
+        if (method === 'perception.entities' && Array.isArray(args?.kinds) && args.kinds.length === 1 && args.kinds[0] === 'hostile' && (args.radius ?? 99) <= 6 && Array.isArray(value?.entities)) {
+          return { ...value, entities: filterNavGuardEntities(value.entities) };
+        }
         if (method === 'container.open') this.menuOpenedAt = Date.now();
         if (method === 'container.close') this.menuOpenedAt = null;
         return value;

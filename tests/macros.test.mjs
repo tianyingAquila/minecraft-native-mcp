@@ -7,6 +7,8 @@ import {recoverPosition} from '../src/recovery.mjs';
 import {dropItemsSafe} from '../src/drop.mjs';
 import {mineBlock} from '../src/mining.mjs';
 import {digToPosition} from '../src/dig-to.mjs';
+import {buildNetherPortal} from '../src/portals.mjs';
+import {filterNavGuardEntities} from '../src/client-actions.mjs';
 import {filterAgentTools} from '../src/agent.mjs';
 
 test('returnToSurface 在露天位置直接返回成功；在地下自动选安全方向挖阶梯直到露天',async()=>{
@@ -350,4 +352,146 @@ test('digToPosition 采矿遇到挡路石(first hit)时自动先清障再采目�
   const dropRes=await dropItemsSafe({slot:0,wholeStack:true},{call:dropCall,mine:async(_c,p)=>{dug.push(p);return {broke:'minecraft:stone',position:p};},sleep:async()=>{}});
   assert.equal(dropRes.method,'dug_pit');
   assert.ok(dug.length>=2);
+});
+
+test('digToPosition 前方同高度受阻时优先向上/下绕行而非与身后空廊两格往返空转',async()=>{
+  let self={x:33.5,y:14,z:77.5,dimension:'minecraft:overworld',health:20,inWater:false,inLava:false,onGround:true};
+  const calls=[];
+  const call=async(method)=>{
+    if(method==='player.getState')return {...self};
+    return {};
+  };
+  const dig=async({direction,slope,length})=>{
+    calls.push(`${direction}:${slope}`);
+    // At y===14, east & north level are blocked by lava/pit; up climbs over it and reaches target!
+    if(Math.floor(self.y)===14 && slope==='level' && (direction==='east' || direction==='north')){
+      return {status:'interrupted',reason:'fluid_or_hazard',completedSteps:0,brokenBlocks:0};
+    }
+    const vec={north:[0,-1],south:[0,1],east:[1,0],west:[-1,0]}[direction];
+    const dy=slope==='up'?1:slope==='down'?-1:0;
+    const steps=Math.min(length,2);
+    self={...self,x:self.x+vec[0]*steps,y:self.y+dy*steps,z:self.z+vec[1]*steps};
+    return {status:'completed',reason:'requested_length_reached',completedSteps:steps,brokenBlocks:steps*2};
+  };
+  const res=await digToPosition({x:39,y:14,z:73},{call,dig,now:()=>0,sleep:async()=>{}});
+  assert.equal(res.status,'succeeded');
+  assert.equal(res.reached,true);
+  assert.ok(calls.some(c=>c.endsWith(':up')),'should climb up over level obstacle instead of oscillating');
+  assert.ok(calls.length<=12,'should reach target without oscillation');
+});
+
+test('makeObsidian 优先选择靠近玩家的岩浆岸边，遇到视线遮挡不崩且只清岩浆上方挡块',async()=>{
+  let hasWater=true,lavaTurnedObsidian=false,obsMined=false,obsCount=0,upperCleared=false;
+  const minedPos=[];
+  const call=async(method,args={})=>{
+    if(method==='player.getState')return {x:44.5,y:14,z:63.5,dimension:'minecraft:overworld',health:20,food:20,inLava:false};
+    if(method==='player.getInventory')return {
+      hotbar:[
+        {slot:0,id:'minecraft:diamond_pickaxe',count:1,damage:0,maxDamage:1561},
+        {slot:1,id:hasWater?'minecraft:water_bucket':'minecraft:bucket',count:1},
+        ...(obsCount?[{slot:2,id:'minecraft:obsidian',count:obsCount}]:[]),
+      ],
+      main:[],
+    };
+    if(method==='fish.useBlock'){
+      if(args.x===45&&args.y===14&&args.z===63&&!upperCleared){
+        throw new Error('Block or requested face is obstructed; first hit minecraft:stone @ 45, 15, 63; target 45, 14, 63');
+      }
+      if(hasWater){hasWater=false;lavaTurnedObsidian=true;}
+      else{hasWater=true;}
+      return {result:'SUCCESS'};
+    }
+    if(method==='fish.probeBlocks'){
+      return {blocks:args.positions.map(p=>{
+        if(p.x===46&&p.y===14&&p.z===63){
+          if(obsMined)return {...p,loaded:true,air:true,fluid:false,fullSupport:false,id:'minecraft:air'};
+          return {...p,loaded:true,air:false,fluid:!lavaTurnedObsidian,fullSupport:lavaTurnedObsidian,id:lavaTurnedObsidian?'minecraft:obsidian':'minecraft:lava'};
+        }
+        if((p.x===45||p.x===47)&&p.y===14&&p.z===63)return {...p,loaded:true,air:false,fluid:false,fullSupport:true,id:'minecraft:stone'};
+        return {...p,loaded:true,air:p.y>=15,fluid:false,fullSupport:p.y<=13,id:p.y>=15?'minecraft:air':'minecraft:stone'};
+      })};
+    }
+    return {};
+  };
+  const mine=async(_c,pos)=>{
+    minedPos.push(pos);
+    if(pos.x===45&&pos.y===15&&pos.z===63){upperCleared=true;return {broke:'minecraft:stone',position:pos};}
+    if(pos.x===46&&pos.y===14&&pos.z===63){obsMined=true;obsCount=1;return {broke:'minecraft:obsidian',position:pos};}
+    throw new Error(`unexpected mine @ ${pos.x},${pos.y},${pos.z}`);
+  };
+  const res=await makeObsidian({count:1,radius:4,seconds:30},{call,mine,sleep:async()=>{}});
+  assert.equal(res.status,'succeeded');
+  assert.equal(upperCleared,true);
+  assert.equal(res.gained,1);
+  assert.ok(!minedPos.some(p=>p.x===45&&p.y===14&&p.z===63),'must never mine lava-level dam block');
+});
+
+test('buildNetherPortal 遇到短草自动放行清理，且起点不平整时自动在附近 4 格内寻找连续四格平地建门',async()=>{
+  let self={x:12.5,y:68,z:109.5,dimension:'minecraft:overworld',health:20,inLava:false,onGround:true};
+  let lit=false,equipped='minecraft:obsidian';
+  const placed=[],cleared=[];
+  const invHotbar=[
+    {slot:0,id:'minecraft:obsidian',count:10},
+    {slot:1,id:'minecraft:cobblestone',count:32},
+    {slot:2,id:'minecraft:flint_and_steel',count:1},
+  ];
+  const call=async(method,args={})=>{
+    if(method==='player.getState')return {...self};
+    if(method==='player.getInventory')return {hotbar:invHotbar,main:[]};
+    if(method==='fish.equip'){
+      const found=invHotbar.find(i=>i.slot===args.slot);
+      if(found)equipped=found.id;
+      return {};
+    }
+    if(method==='fish.navigate'){
+      self={...self,x:args.x,y:args.y,z:args.z,onGround:true};
+      return {};
+    }
+    if(method==='fish.useBlock'){lit=true;return {result:'SUCCESS'};}
+    return {};
+  };
+  let blockerBroken=false;
+  const place=async pos=>{
+    if(pos.x===14&&pos.y===68&&pos.z===109&&!blockerBroken){
+      throw new Error('无法在该空位正常放置：Block or requested face is obstructed; first hit minecraft:grass_block @ 14, 68, 110; target 14, 68, 110');
+    }
+    placed.push({...pos,item:equipped});return {block:equipped};
+  };
+  const mine=async(_c,pos)=>{
+    if(pos.x===14&&pos.y===68&&pos.z===110)blockerBroken=true;
+    cleared.push(pos);return {broke:'minecraft:short_grass',position:pos};
+  };
+  const call2=async(method,args={})=>{
+    if(method==='fish.probeBlocks'){
+      return {blocks:args.positions.map(p=>{
+        if(lit && p.y>=69 && p.y<=71)return {...p,loaded:true,air:false,fluid:false,collision:false,fullSupport:false,id:'minecraft:nether_portal'};
+        // Only x=13..16, z=109 has clean ground and pre-placed upper frame (needsLift=false); x=12 has a floor hole
+        const isHole=(p.x<=12 && p.y===67) || (p.z!==109 && p.z!==111 && p.y===67);
+        if(p.y<=67 && !isHole)return {...p,loaded:true,air:false,fluid:false,collision:true,fullSupport:true,falling:false,id:'minecraft:grass_block'};
+        const isUpperObs=(p.z===109 && ((p.x===13||p.x===16)&&p.y>=70&&p.y<=72 || (p.x===14||p.x===15)&&p.y===72));
+        if(isUpperObs)return {...p,loaded:true,air:false,fluid:false,collision:true,fullSupport:true,falling:false,id:'minecraft:obsidian'};
+        if(p.y===68 && p.x===14 && p.z===109)return {...p,loaded:true,air:false,fluid:false,collision:false,fullSupport:false,falling:false,id:'minecraft:short_grass'};
+        return {...p,loaded:true,air:true,fluid:false,collision:false,fullSupport:false,falling:false,id:'minecraft:air'};
+      })};
+    }
+    return call(method,args);
+  };
+  const res=await buildNetherPortal({x:12,y:68,z:109,axis:'z'},{call:call2,place,mine});
+  assert.equal(res.status,'succeeded');
+  assert.equal(res.origin.x,13);
+  assert.equal(res.origin.axis,'x');
+  assert.ok(cleared.some(p=>p.x===14&&p.y===68&&p.z===109),'should auto-clear short_grass');
+  assert.ok(placed.length>=4);
+});
+
+test('filterNavGuardEntities 阻止寻路自动自卫误打僵尸猪灵/末影人/普通猪灵，但保留真正敌对的烈焰人/猪灵蛮兵/凋灵骷髅',()=>{
+  const filtered=filterNavGuardEntities([
+    {type:'minecraft:zombified_piglin',distance:2.1},
+    {type:'minecraft:enderman',distance:2.5},
+    {type:'minecraft:piglin',distance:2.0},
+    {type:'minecraft:piglin_brute',distance:2.8},
+    {type:'minecraft:blaze',distance:2.4},
+    {type:'minecraft:wither_skeleton',distance:2.9},
+  ]);
+  assert.deepEqual(filtered.map(e=>e.type),['minecraft:piglin_brute','minecraft:blaze','minecraft:wither_skeleton']);
 });

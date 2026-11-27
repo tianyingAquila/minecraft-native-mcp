@@ -1,50 +1,154 @@
 import {setTimeout as delay} from 'node:timers/promises';
 import {pillar} from './end-build.mjs';
+import {mineBlock} from './mining.mjs';
 
 const obsidian = 'minecraft:obsidian';
 const portal = 'minecraft:nether_portal';
-const frameFillers = ['minecraft:cobblestone','minecraft:cobbled_deepslate','minecraft:stone','minecraft:andesite','minecraft:dirt'];
+const frameFillers = ['minecraft:cobblestone','minecraft:cobbled_deepslate','minecraft:stone','minecraft:andesite','minecraft:dirt','minecraft:granite','minecraft:diorite','minecraft:netherrack'];
 const stacks = inventory => [...inventory.hotbar,...inventory.main];
+const posKey = p => `${p.x},${p.y},${p.z}`;
+const isSoftPlant = b => Boolean(b?.loaded && !b.air && !b.fluid && b.collision === false);
+const isOpenOrSoft = b => Boolean(b?.loaded && !b.fluid && (b.air || b.collision === false));
 
-export async function buildNetherPortal(args, {call, place, signal}) {
-  if (![args.x,args.y,args.z].every(Number.isFinite) || !['x','z'].includes(args.axis)) throw Error('需要门框左下角坐标和水平轴 x 或 z。');
-  const x = Math.floor(args.x), y = Math.floor(args.y), z = Math.floor(args.z);
-  const point = (column,height) => ({x:x+(args.axis==='x'?column:0),y:y+height,z:z+(args.axis==='z'?column:0)});
+function evaluatePortalSpot(x, y, z, axis, side, getBlock) {
+  const point = (column, height) => ({x: x + (axis === 'x' ? column : 0), y: y + height, z: z + (axis === 'z' ? column : 0)});
   const frame = [];
   const interior = [];
-  for (let height=0; height<=4; height++) for (let column=0; column<=3; column++) {
-    const pos = point(column,height);
-    const edge = column===0 || column===3;
-    if (edge || height===0 || height===4) frame.push({pos,corner:edge&&(height===0||height===4),height});
+  for (let height = 0; height <= 4; height++) for (let column = 0; column <= 3; column++) {
+    const pos = point(column, height);
+    const edge = column === 0 || column === 3;
+    if (edge || height === 0 || height === 4) frame.push({pos, corner: edge && (height === 0 || height === 4), height});
     else interior.push(pos);
   }
-  const probe = async positions => (await call('fish.probeBlocks',{positions})).blocks;
+  const floor = [0, 1, 2, 3].map(c => getBlock(point(c, -1)));
+  if (floor.some(b => !b?.loaded || !b.fullSupport || b.fluid || b.falling)) {
+    return {ok: false, reason: '门框下方需连续四格稳固地面。'};
+  }
+  const frameBlocks = frame.map(cell => getBlock(cell.pos));
+  const interiorBlocks = interior.map(pos => getBlock(pos));
+  if (interiorBlocks.every(b => b?.id === portal)) {
+    return {ok: true, alreadyLit: true, x, y, z, axis, side, point, frame, interior, pending: [], softToClear: [], work: null};
+  }
+  if (interiorBlocks.some(b => !isOpenOrSoft(b))) {
+    return {ok: false, reason: '门框内部需要两格宽、三格高的空地。'};
+  }
+  const pending = [];
+  for (let i = 0; i < frame.length; i++) {
+    const cell = frame[i];
+    const b = frameBlocks[i];
+    if (b?.id === obsidian || (cell.corner && b?.fullSupport && !b.fluid && !b.falling)) continue;
+    if (!isOpenOrSoft(b)) return {ok: false, reason: '门框目标有不匹配方块，请先清理或另选位置。'};
+    pending.push(cell);
+  }
+  const needsLift = pending.some(cell => cell.height >= 2);
+  const work = {...point(1, 0)};
+  if (axis === 'x') work.z += side * 2;
+  else work.x += side * 2;
+  const workCells = [-1, 0, 1, 2, 3, 4].map(dy => getBlock({...work, y: y + dy}));
+  if (!workCells[0]?.fullSupport || workCells[0].fluid || workCells[0].falling || workCells.slice(1, needsLift ? 6 : 3).some(b => !isOpenOrSoft(b))) {
+    return {ok: false, reason: '门框侧面两格处需要可站立的平地和脚手空间。'};
+  }
+  const softToClear = [
+    ...frameBlocks.filter(isSoftPlant),
+    ...interiorBlocks.filter(isSoftPlant),
+    ...workCells.slice(1, needsLift ? 6 : 3).filter(isSoftPlant),
+  ];
+  return {ok: true, alreadyLit: false, x, y, z, axis, side, point, frame, interior, pending, softToClear, work, needsLift};
+}
+
+export async function buildNetherPortal(args, {call, place, mine = mineBlock, signal}) {
+  if (![args.x,args.y,args.z].every(Number.isFinite) || !['x','z'].includes(args.axis)) throw Error('需要门框左下角坐标和水平轴 x 或 z。');
+  const reqX = Math.floor(args.x), reqY = Math.floor(args.y), reqZ = Math.floor(args.z);
+  const probe = async positions => {
+    const out = [];
+    for (let i = 0; i < positions.length; i += 64) {
+      const res = await call('fish.probeBlocks', {positions: positions.slice(i, i + 64)});
+      out.push(...(res.blocks || []));
+    }
+    return out;
+  };
   const state = await call('player.getState');
   if (!state.onGround || state.inLava || state.health<=10 || !['minecraft:overworld','minecraft:the_nether'].includes(state.dimension)) throw Error('先在主世界或地狱的稳定地面站稳。');
-  const floor = await probe([0,1,2,3].map(column=>point(column,-1)));
-  if (floor.some(block=>!block.loaded||!block.fullSupport||block.fluid||block.falling)) throw Error('门框下方需连续四格稳固地面。');
-  const existing = await probe([...frame.map(cell=>cell.pos),...interior]);
-  const cells = existing.slice(frame.length);
-  if (cells.every(block=>block.id===portal)) return {status:'succeeded',placed:0,entry:point(1,1),alreadyLit:true};
-  if (cells.some(block=>!block.loaded||!block.air||block.fluid)) throw Error('门框内部需要两格宽、三格高的空地。');
-  const pending = frame.filter((cell,index) => {
-    const block = existing[index];
-    if (block.id===obsidian || (cell.corner&&block.fullSupport&&!block.fluid&&!block.falling)) return false;
-    if (!block.loaded || !block.air || block.fluid) throw Error('门框目标有不匹配方块，请先清理或另选位置。');
-    return true;
-  });
+
+  const cache = new Map();
+  const loadPositions = async positions => {
+    const missing = [];
+    const seen = new Set();
+    for (const p of positions) {
+      const k = posKey(p);
+      if (!cache.has(k) && !seen.has(k)) { seen.add(k); missing.push(p); }
+    }
+    if (missing.length) {
+      for (const b of await probe(missing)) cache.set(posKey(b), b);
+    }
+  };
+  const getBlock = p => cache.get(posKey(p));
+
+  const tryExact = async (cx, cy, cz, caxis) => {
+    const prefSide = caxis === 'x' ? (state.z < cz + .5 ? -1 : 1) : (state.x < cx + .5 ? -1 : 1);
+    const needed = [];
+    for (let h = -1; h <= 4; h++) {
+      for (let c = 0; c <= 3; c++) needed.push({x: cx + (caxis === 'x' ? c : 0), y: cy + h, z: cz + (caxis === 'z' ? c : 0)});
+      for (const s of [prefSide, -prefSide]) {
+        const wx = cx + (caxis === 'x' ? 1 : s * 2);
+        const wz = cz + (caxis === 'z' ? 1 : s * 2);
+        needed.push({x: wx, y: cy + h, z: wz});
+      }
+    }
+    await loadPositions(needed);
+    let firstErr = null;
+    for (const s of [prefSide, -prefSide]) {
+      const ev = evaluatePortalSpot(cx, cy, cz, caxis, s, getBlock);
+      if (ev.ok) return ev;
+      if (!firstErr) firstErr = ev;
+    }
+    return firstErr;
+  };
+
+  let chosen = await tryExact(reqX, reqY, reqZ, args.axis);
+  if (!chosen?.ok) {
+    // Auto-search nearby clean 4x5 spot within +-5 blocks horizontally, +-1..2 vertically
+    const box = [];
+    for (let dx = -5; dx <= 8; dx++) {
+      for (let dz = -5; dz <= 8; dz++) {
+        for (let dy = -2; dy <= 6; dy++) {
+          box.push({x: reqX + dx, y: reqY + dy, z: reqZ + dz});
+        }
+      }
+    }
+    await loadPositions(box);
+    const axes = args.axis === 'x' ? ['x', 'z'] : ['z', 'x'];
+    const candidates = [];
+    for (let dx = -4; dx <= 4; dx++) {
+      for (let dz = -4; dz <= 4; dz++) {
+        for (let dy = -1; dy <= 2; dy++) {
+          const cx = reqX + dx, cy = reqY + dy, cz = reqZ + dz;
+          const dist = Math.hypot(cx - reqX, (cy - reqY) * 1.5, cz - reqZ);
+          for (const caxis of axes) candidates.push({cx, cy, cz, caxis, dist});
+        }
+      }
+    }
+    candidates.sort((a, b) => a.dist - b.dist);
+    for (const {cx, cy, cz, caxis} of candidates) {
+      const prefSide = caxis === 'x' ? (state.z < cz + .5 ? -1 : 1) : (state.x < cx + .5 ? -1 : 1);
+      for (const s of [prefSide, -prefSide]) {
+        const ev = evaluatePortalSpot(cx, cy, cz, caxis, s, getBlock);
+        if (ev.ok) { chosen = ev; break; }
+      }
+      if (chosen?.ok) break;
+    }
+  }
+  if (!chosen?.ok) throw Error(chosen?.reason || '附近未找到连续四格稳固地面与宽4高5的建门空间。');
+
+  const {x, y, z, axis, point, interior, pending, softToClear, work, needsLift} = chosen;
+  if (chosen.alreadyLit) return {status:'succeeded',placed:0,entry:point(1,1),origin:{x,y,z,axis},alreadyLit:true};
+
   const inventory = stacks(await call('player.getInventory'));
   const count = item => inventory.filter(stack=>stack.id===item).reduce((total,stack)=>total+stack.count,0);
   const corners = pending.filter(cell=>cell.corner).length;
-  const needsLift = pending.some(cell=>cell.height>=2);
   const filler = frameFillers.find(item=>count(item)>=corners+(needsLift?3:0));
   if (count(obsidian)<pending.length-corners || ((corners||needsLift)&&!filler) || !count('minecraft:flint_and_steel')) throw Error('材料不足，需要剩余门框的普通黑曜石、转角和三格脚手用方块、打火石。');
-  const side = args.axis==='x' ? (state.z<z+.5?-1:1) : (state.x<x+.5?-1:1);
-  const work = {...point(1,0)};
-  if(args.axis==='x') work.z+=side*2;
-  else work.x+=side*2;
-  const workCells = await probe([-1,0,1,2,3,4].map(dy=>({...work,y:y+dy})));
-  if(!workCells[0]?.fullSupport||workCells[0].fluid||workCells[0].falling||workCells.slice(1,needsLift?6:3).some(block=>!block.loaded||!block.air||block.fluid)) throw Error('门框侧面两格处需要可站立的平地和脚手空间。');
+
   let placed = 0;
   let lifted = false;
   const equip = async item => {
@@ -54,53 +158,94 @@ export async function buildNetherPortal(args, {call, place, signal}) {
   };
   try {
     await call('fish.navigate',{x:work.x+.5,y,z:work.z+.5,reach:.3});
-    const approachUntil=Date.now()+7000;
+    const approachUntil=Date.now()+12000;
     while (true) {
       const current=await call('player.getState');
-      if(current.onGround&&Math.hypot(current.x-work.x-.5,current.y-y,current.z-work.z-.5)<.35) break;
-      if(Date.now()>=approachUntil) return {status:'interrupted',reason:'work_position_not_reached',placed};
+      if(current.onGround&&Math.hypot(current.x-work.x-.5,current.y-y,current.z-work.z-.5)<.45) break;
+      if(Date.now()>=approachUntil) return {status:'interrupted',reason:'work_position_not_reached',placed,origin:{x,y,z,axis}};
       await delay(150,undefined,{signal});
     }
     await call('fish.cancel');
+    // Clear any short_grass / flowers / snow inside frame, interior, or work column
+    for (const soft of softToClear) {
+      try { await mine(call, {x: soft.x, y: soft.y, z: soft.z}, {signal}); } catch {}
+    }
+    const tryClearPlaceBlocker = async err => {
+      const msg = String(err?.message || '');
+      const m = msg.match(/first hit\s+([a-z0-9_:]+)\s*@\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)/i);
+      if (!m) return false;
+      if (/obsidian|nether_portal|lava|water|bedrock|spawner|chest|furnace/i.test(m[1])) return false;
+      const blocker = {x: Number(m[2]), y: Number(m[3]), z: Number(m[4])};
+      const cur = await call('player.getState');
+      if (blocker.x === Math.floor(cur.x) && blocker.z === Math.floor(cur.z) && blocker.y < Math.floor(cur.y)) return false;
+      try {
+        await mine(call, blocker, {signal});
+        return true;
+      } catch {
+        return false;
+      }
+    };
     // Upper corners support the two top obsidian blocks.
     pending.sort((a,b)=>a.height-b.height || Number(b.corner)-Number(a.corner));
     for (const cell of pending) {
       signal?.throwIfAborted();
       const current = await call('player.getState');
       if (current.health<=10||current.health<state.health-2||current.inLava||current.dimension!==state.dimension) {
-        return {status:'interrupted',reason:'player_danger',placed};
+        return {status:'interrupted',reason:'player_danger',placed,origin:{x,y,z,axis}};
       }
       if(cell.height>=2&&!lifted){
         const lift=await pillar({direction:'up',height:3},{call,signal});
-        if(lift.advanced!==3) return {status:'interrupted',reason:'scaffold_not_completed',placed,scaffold:lift};
+        if(lift.advanced!==3) return {status:'interrupted',reason:'scaffold_not_completed',placed,scaffold:lift,origin:{x,y,z,axis}};
         lifted=true;
       }
       const material = cell.corner?filler:obsidian;
-      await equip(material);
-      const receipt = await place(cell.pos);
+      let receipt = null;
+      let placeErr = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await equip(material);
+        try {
+          receipt = await place(cell.pos);
+          placeErr = null;
+          break;
+        } catch (err) {
+          signal?.throwIfAborted();
+          placeErr = err;
+          if (attempt < 2 && await tryClearPlaceBlocker(err)) continue;
+          break;
+        }
+      }
+      if (placeErr) throw placeErr;
       if (receipt.block!==material) throw Error('放置后的方块与门框材料不符。');
       placed++;
     }
     if(lifted){
       const down=await pillar({direction:'down',height:3},{call,signal});
-      if(down.advanced!==3) return {status:'interrupted',reason:'scaffold_descent_failed',placed,scaffold:down};
+      if(down.advanced!==3) return {status:'interrupted',reason:'scaffold_descent_failed',placed,scaffold:down,origin:{x,y,z,axis}};
       lifted=false;
     }
     await equip('minecraft:flint_and_steel');
     let error;
     for (const column of [1,2]) {
-      try { await call('fish.useBlock',{...point(column,0),face:'up'}); error=null; break; }
-      catch (e) { signal?.throwIfAborted(); error=e; }
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try { await call('fish.useBlock',{...point(column,0),face:'up'}); error=null; break; }
+        catch (e) {
+          signal?.throwIfAborted();
+          error=e;
+          if (attempt === 0 && await tryClearPlaceBlocker(e)) { await equip('minecraft:flint_and_steel'); continue; }
+          break;
+        }
+      }
+      if (!error) break;
     }
     if (error) throw error;
     for (let attempt=0;attempt<8;attempt++) {
-      if ((await probe(interior)).every(block=>block.id===portal)) return {status:'succeeded',placed,entry:point(1,1)};
+      if ((await probe(interior)).every(block=>block.id===portal)) return {status:'succeeded',placed,entry:point(1,1),origin:{x,y,z,axis}};
       await delay(150,undefined,{signal});
     }
-    return {status:'interrupted',reason:'portal_not_lit',placed};
+    return {status:'interrupted',reason:'portal_not_lit',placed,origin:{x,y,z,axis}};
   } catch(error) {
     signal?.throwIfAborted();
-    return {status:'interrupted',reason:'frame_action_failed',placed,scaffoldStillUp:lifted,message:error.message};
+    return {status:'interrupted',reason:'frame_action_failed',placed,scaffoldStillUp:lifted,origin:{x,y,z,axis},message:error.message};
   } finally {await call('fish.cancel').catch(()=>{});}
 }
 

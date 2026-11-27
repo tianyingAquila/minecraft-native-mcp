@@ -255,7 +255,12 @@ public final class FishLiveClient implements ClientModInitializer {
             String faceName=ctx.optString("face","");
             Direction face=faceName.isEmpty()?null:Direction.byName(faceName);
             if(!faceName.isEmpty()&&face==null)throw RpcException.badRequest("Invalid block face.");
-            var result=ClientMc.gameMode().useItemOn(p,InteractionHand.MAIN_HAND,visibleBlock(pos,face));
+            var hit=visibleBlock(pos,face);
+            var result=ClientMc.gameMode().useItemOn(p,InteractionHand.MAIN_HAND,hit);
+            String rName=result.toString();
+            if(p.getMainHandItem().getItem() instanceof net.minecraft.world.item.BucketItem && !rName.contains("SUCCESS") && !rName.contains("Success") && !rName.contains("CONSUME") && !rName.contains("Consume")){
+                result=ClientMc.gameMode().useItem(p,InteractionHand.MAIN_HAND);
+            }
             JsonObject o=new JsonObject();o.addProperty("result",result.toString());return o;
         }));
         router.register("fish.checkBlock",ctx->ClientMc.call(()->{
