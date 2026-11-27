@@ -5,6 +5,7 @@ import {makeObsidian} from '../src/obsidian.mjs';
 import {buildEnclosurePlan,farmBlazeSpawner} from '../src/blaze-farm.mjs';
 import {recoverPosition} from '../src/recovery.mjs';
 import {dropItemsSafe} from '../src/drop.mjs';
+import {mineBlock} from '../src/mining.mjs';
 import {filterAgentTools} from '../src/agent.mjs';
 
 test('returnToSurface 在露天位置直接返回成功；在地下自动选安全方向挖阶梯直到露天',async()=>{
@@ -199,4 +200,54 @@ test('dropItemsSafe 在封闭窄矿道自动侧边挖2格深垃圾坑并定向�
   assert.equal(second.dropped,32);
   assert.equal(second.method,'existing_pit');
   assert.equal(dug.length,3);
+});
+
+test('dropItemsSafe 挖侧坑遇到已变空气的方块时跳过而不中断丢弃',async()=>{
+  let cobble=32;
+  let aimed=0;
+  const call=async(method,args={})=>{
+    if(method==='player.getState')return {x:0.5,y:10,z:0.5,dimension:'minecraft:overworld',health:20,inWater:false,inLava:false,onGround:true};
+    if(method==='player.getInventory')return {hotbar:cobble>0?[{slot:0,id:'minecraft:cobblestone',count:cobble}]:[],main:[]};
+    if(method==='fish.probeBlocks'){
+      return {blocks:args.positions.map(p=>({...p,loaded:true,air:false,fluid:false,blockEntity:false,falling:false,hardness:1.5,fullSupport:true,id:'minecraft:stone'}))};
+    }
+    if(method==='fish.dropAimed'){aimed++;cobble=0;return {dropped:32};}
+    return {};
+  };
+  let calls=0;
+  const mine=async(_c,pos)=>{
+    calls++;
+    if(calls===2)throw new Error('指定位置没有已加载的可挖方块');
+    return {broke:'minecraft:stone',position:pos};
+  };
+  const res=await dropItemsSafe({slot:0,wholeStack:true},{call,mine,sleep:async()=>{}});
+  assert.equal(res.dropped,32);
+  assert.equal(res.method,'dug_pit');
+  assert.equal(aimed,1);
+});
+
+test('mineBlock 挖普通石头/深板岩时优先用石镐保护铁镐和钻石镐，挖钻石矿时切回高阶镐',async()=>{
+  const equipped=[];
+  let broken=false;
+  const runFor=async(blockId)=>{
+    broken=false;
+    equipped.length=0;
+    const call=async(method,args={})=>{
+      if(method==='perception.blocks'){
+        return {blocks:[{...args.positions[0],loaded:true,air:broken,id:broken?'minecraft:air':blockId,hardness:3,canHarvest:true,bestSlot:0}]};
+      }
+      if(method==='player.getInventory'){
+        return {hotbar:[{slot:0,id:'minecraft:iron_pickaxe',maxDamage:250,damage:20},{slot:1,id:'minecraft:stone_pickaxe',maxDamage:131,damage:10}],main:[]};
+      }
+      if(method==='fish.equip')equipped.push(args.slot);
+      if(method==='interact.breakBlock')broken=true;
+      return {};
+    };
+    await mineBlock(call,{x:1,y:10,z:1},{sleep:async()=>{}});
+    return equipped.at(-1);
+  };
+  assert.equal(await runFor('minecraft:deepslate'),1);
+  assert.equal(await runFor('minecraft:stone'),1);
+  assert.equal(await runFor('minecraft:deepslate_diamond_ore'),0);
+  assert.equal(await runFor('minecraft:obsidian'),0);
 });

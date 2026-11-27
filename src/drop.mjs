@@ -86,7 +86,13 @@ async function digSidePit(call, candidate, {mine, signal, sleep}) {
   // Dig top-to-bottom: wallEye (py+1) -> pitTop (py) -> pitBottom (py-1)
   for (const cell of candidate.toDig) {
     signal?.throwIfAborted();
-    await mine(call, {x: cell.x, y: cell.y, z: cell.z}, {signal, sleep});
+    try {
+      await mine(call, {x: cell.x, y: cell.y, z: cell.z}, {signal, sleep});
+    } catch (err) {
+      // Skip cells that already turned to air (e.g. grass/popped blocks when digging top-to-bottom).
+      if (/没有已加载的可挖方块/.test(String(err?.message || ''))) continue;
+      throw err;
+    }
   }
 }
 

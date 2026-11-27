@@ -105,3 +105,26 @@ test('隔墙或隔层敌对生物不误打断矿道，无遮挡近敌才中断�
  const rDown=await digTunnel({direction:'east',length:1,slope:'down'},{...down,placeFloor:async pos=>{assert.ok(down.calls.some(([m])=>m==='interact.breakBlock'));placed=true;return {block:'minecraft:cobblestone',position:pos};}});
  assert.equal(rDown.status,'completed');assert.equal(rDown.placedFloors,1);
 });
+
+test('向上阶梯多帧起跳期间保持连续按键，不在半空误调 control.stop 打断跳跃',async()=>{
+ const w=world({slope:'up'});
+ let ticks=0;
+ const baseCall=w.call;
+ w.call=async(m,a={})=>{
+  if(m==='control.setInput'&&a.forward&&a.jump){
+   ticks++;
+   if(ticks===1){w.self.y=64.5;w.self.onGround=false;}
+   else if(ticks===2){w.self.x=1.2;w.self.y=65.1;w.self.onGround=false;}
+   else if(ticks>=3){w.self.x=1.5;w.self.y=65;w.self.onGround=true;}
+   w.calls.push([m,structuredClone(a)]);
+   return {};
+  }
+  return baseCall(m,a);
+ };
+ const res=await digTunnel({direction:'east',length:1,slope:'up'},w);
+ assert.equal(res.status,'completed');
+ assert.equal(res.completedSteps,1);
+ const moveOps=w.calls.filter(([m])=>m==='control.setInput'||m==='control.stop').map(([m])=>m);
+ assert.equal(moveOps.filter(m=>m==='control.stop').length,1);
+ assert.equal(moveOps.at(-1),'control.stop');
+});

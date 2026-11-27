@@ -154,19 +154,40 @@ export async function digTunnel(args, {call, signal, discover, placeFloor, equip
       }
       const beforeWalk=await guard({ requirePickaxe: false });
       if(cut.some(pos=>!beforeWalk.find(b=>same(b,pos))?.air)) stop('passage_not_clear');
-      const moveUntil=Math.min(deadline,now()+5000);
-      let closest=Infinity, movedAt=now();
-      while (true) {
-        await guard({ requirePickaxe: false });
-        const distance=Math.hypot(lastSelf.x-feet.x-.5,lastSelf.z-feet.z-.5);
-        if(distance<=.2 && Math.abs(lastSelf.y-feet.y)<.2) break;
-        if(now()>=moveUntil || now()-movedAt>1500) stop('movement_stalled');
-        if(distance<closest-.03){closest=distance;movedAt=now();}
-        if(Math.abs(lastSelf.y-feet.y)>1.2) stop('unexpected_height_change');
-        await call('control.lookAt',{x:feet.x+.5,y:lastSelf.y+1.62,z:feet.z+.5});
-        await call('control.setInput',{forward:distance>.2,back:false,left:false,right:false,jump:slope==='up'&&lastSelf.onGround&&lastSelf.y<feet.y,sneak:false,sprint:false});
-        await sleep(50);
-        await call('control.stop');
+      const moveUntil=Math.min(deadline,now()+6000);
+      const stallLimit=slope==='up'?2500:1800;
+      let closest=Infinity, movedAt=now(), lastGuardAt=now(), retriedStepBack=false;
+      try {
+        while (true) {
+          if (now()-lastGuardAt>=350) {
+            await guard({ requirePickaxe: false });
+            lastGuardAt=now();
+          } else {
+            signal?.throwIfAborted();
+            if (now()>=deadline) stop('time_budget');
+            const self=await call('player.getState'); lastSelf=self;
+            if (self.gameMode!=='survival' || self.dimension!==initial.dimension) stop('player_state_changed');
+            if (self.health<initial.health-.1 || self.health<=10 || (self.air??300)<100 || self.inWater) stop('player_danger');
+          }
+          const distance=Math.hypot(lastSelf.x-feet.x-.5,lastSelf.z-feet.z-.5);
+          const dy=feet.y-lastSelf.y;
+          if(distance<=.25 && Math.abs(dy)<.2) break;
+          if(now()>=moveUntil || now()-movedAt>stallLimit) stop('movement_stalled');
+          const progressDist=Math.hypot(distance, dy);
+          if(progressDist<closest-.03){closest=progressDist;movedAt=now();}
+          if(Math.abs(dy)>1.35) stop('unexpected_height_change');
+          await call('control.lookAt',{x:feet.x+.5,y:lastSelf.y+1.62,z:feet.z+.5});
+          if(slope==='up' && !retriedStepBack && dy>0.4 && lastSelf.onGround && now()-movedAt>700){
+            retriedStepBack=true;
+            await call('control.setInput',{forward:false,back:true,left:false,right:false,jump:false,sneak:false,sprint:false});
+            await sleep(120);
+          }
+          const needJump=slope==='up' && dy>0.08;
+          await call('control.setInput',{forward:distance>.18 || needJump,back:false,left:false,right:false,jump:needJump,sneak:false,sprint:false});
+          await sleep(slope==='up'?120:60);
+        }
+      } finally {
+        await call('control.stop').catch(()=>{});
       }
       await call('fish.cancel');
       result.completedSteps++;
